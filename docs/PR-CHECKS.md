@@ -58,6 +58,24 @@ An explicit Bash shell enables `pipefail`, so piping fixture/model output into
 
 ## UI work and cleanup tests
 
+Shared-tooltip cases load the production controller over explicit native owner,
+content-clear, visibility and scale boundaries. They cover Tooltip hiding/scaling
+without suppressing ability/item UI hovers or changing the game's Enhanced
+Tooltips choice, retained native returns, unregistered UI buttons, unobserved
+owner replacement, cursor/icon placement, unchanged work, editor suppression and
+world cleanup in both Performance Mode states. These cases remain CI-only and
+were not run locally; they do not prove native tooltip rendering or event order.
+
+Native world-SCT cases run the actual adapter and controller over explicit fake
+capability/event/projection endpoints. They cover native-only intake, one-shot
+anchors without plates, camera movement after death, living/dead offscreen
+hiding and remaining-life recovery, bounded distance scaling, distinct native
+targets/casters, both grouping modes, malformed/throwing responses, retry
+throttling, stream retirement, MSBT/legacy fallback and off/world cleanup.
+They add no runtime hook or shipped fixture. Cases are CI-only and were not run
+locally; mocks cannot establish native death-position capture, camera-update
+ordering, provider availability, appearance or FPS.
+
 Meter processing cases exercise growing native source/member lists through the
 production adapter and controller. Fixture-only counters check that ordinary
 counter changes reuse identity preparation, appended history reuses contribution
@@ -143,6 +161,34 @@ pool reuse, hidden/off work and both Performance Mode states use the production
 owners over explicit fake boundaries. These cases are CI-only and were not
 executed locally; they do not prove native client behavior.
 
+Native hover-ID cases expose received source/owner/caster/proc/rank and actual
+positive-origin metadata without a new snapshot. They distinguish equally named
+rows with the same source ID but different native proc flags, avoid private
+display tokens and ignore zero-display origin history. The adapter prepares
+text lazily in one bounded reusable buffer, reuses it for counter-only changes,
+refreshes changed metadata and retires old handles on Clear. Full meter cases
+exercise unchanged hover writes, metadata changes with unchanged captions and
+amounts, foreign tooltip ownership and hidden work in both Performance Mode
+states. Diagnostics do not establish the identities in a screenshot until the
+actual tooltip is observed. Coverage remains CI-only.
+
+Talent-rank cases cover direct known talent descriptors and ability rows with
+validated actual talent origins. They combine native ranks without rewriting
+counter records, check later upgrades and stable display identities across the
+three source views, and retain explicit variants, owner/caster/proc/item
+distinctions and same-rank ambiguity. Actual-origin cases reproduce received
+Flametongue shapes with absent/present Fire Nova ranks and Windfury shapes with
+Rockbiter/Stormstrike triggers. They group by validated actual talent ownership,
+preserve the original ability keys/ranks, reject missing or multiple ownership,
+and retain conflicting source slots or same-rank origin IDs. Full meter cases
+check that an additional triggering ability reuses one row in both modes.
+Checkpoint deltas, unavailable rates, localization, highest-rank artwork
+readiness and counter-only identity reuse share the production adapter. Full
+meter cases check pooled row reuse and hidden work in both Performance Mode
+states. The reported tooltips supply the source/origin shapes; these CI-only
+mocks use illustrative counters and do not establish the complete native
+snapshot, patched live appearance or FPS.
+
 Item-rank cases add differing rank-specific item IDs under one explicit item
 key, direct and item-bound sources, single actual-origin joins, independent
 components and item copies. They retain unknown/mixed origins, same-rank
@@ -154,7 +200,8 @@ and were not executed locally; no live Eye of Hakkar snapshot was available.
 
 Pet meter cases add explicit recorded hero/pet/summon/totem actors, overlapping
 spell names, repeated summon incarnations and native type-key fallbacks. They
-cover default spell/caster captions, optional pet summaries, native rates and
+cover default spell/caster captions, exact-match suffix suppression without
+merging player/pet identities, localized name changes, optional pet summaries, native rates and
 checkpoint preservation, retained portraits, metadata changes, unchanged reuse,
 hidden/off work and both Performance Mode states. Display/editor cases cover
 default-off normalization, searchable controls, preview, Confirm, discard,

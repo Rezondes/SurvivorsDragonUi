@@ -93,6 +93,22 @@ view name. Both header fields start on. All seven options use the same preview, 
 Cancel, profile and reset behavior. Healing uses healing totals and HPS.
 Hover still provides the full name and numbers when row values are hidden.
 
+Native v1 rows also show **Native IDs** in that tooltip. The technical field
+names stay as the API spells them: `rowId`, `sourceKey`, `ownerId`, `actorId`,
+`nativeProc`, `kind`, `attribution` and `rank`, plus supplied ability, talent,
+variant and item IDs. Accepted positive members supply actual
+`originSourceKey` details; zero-display history supplies none. Missing fields
+show `--` or are omitted. These are received native identities, never the
+private display token or an ID guessed from a name.
+
+This helps compare two equally named rows that still have separate DPS. A
+combined row can include several native source records. The tooltip shows at
+most three records and three actual origins per record, within 24 diagnostic
+lines; `...` marks omitted details. It makes no additional native read. Text is
+prepared only on hover and reused while identities and metadata stay unchanged.
+Both Performance Mode states share this static behavior. Legacy meters keep
+their existing statistics tooltip because they do not supply these IDs.
+
 **Party Damage** lists heroes during co-op, with each hero's class color and
 native unit portrait inside the same gold ring. It uses the game's player
 totals and DPS; the **DPS window** setting applies to Damage Done. The row/icon
@@ -180,6 +196,42 @@ existing cadence. Both Performance Mode states use the same instant result.
 CI-only cases cover nine ranks, later upgrades, resets, rates, metadata changes
 and distinct sources; no local tests or game execution were run.
 
+## Talent ranks
+
+Damage Done, Healing Done and Boss Damage also combine recognized ranks of one
+native talent. A direct talent source requires known attribution, a valid
+`talentKey` and rank. The highest contributing rank supplies its received name
+and artwork. Later upgrades retain one display identity and add their native
+amounts and rates, like ability ranks.
+
+Known ability procs already named from one validated actual talent origin group
+under that talent across triggering abilities and optional ability ranks.
+For example, the received `ability:fire_nova` without a rank and
+`ability:fire_nova:r1` can share Flametongue Weapon rank 3. Rockbiter and
+Stormstrike procs with the same actual Windfury Weapon origin share its row too.
+The highest contributing talent rank supplies the caption and artwork. The
+addon never assigns a missing ability rank or derives ownership from names,
+definition relationships or loadouts. Every positive member of each native row
+must still agree on one exact valid actual origin.
+
+Ambiguity checks retain the triggering ability, its supplied rank or explicit
+absence, and talent rank. Conflicting native sources in one such slot, or
+different actual origin IDs at the same talent rank, keep the whole family
+separate. Item-bound rank families retain their existing component identity
+and highest-item-rank presentation, with talent rank as its tie-breaker.
+
+Different owners, recorded casters, proc flags, explicit variants,
+item identities and talent identities stay separate. Missing or invalid talent
+metadata and conflicting sources at the same rank stay separate as well;
+names and source-key text never establish a family. No native record, amount,
+rate, checkpoint or origin is rewritten. Existing pooled rows, metadata caches,
+one-second rates, pet summaries and both Performance Mode states keep their
+shared lifecycle. CI-only cases cover direct and actual-origin ranks, upgrades,
+ambiguity, art readiness, rates, resets and hidden work. No local tests or game
+execution were performed. The reported tooltips establish these source/origin
+shapes; the complete native snapshot and the patched live appearance remain
+unverified.
+
 ## Item ranks
 
 The v1 meter also combines recognized ranks of one item, including item-bound
@@ -207,7 +259,10 @@ supplying that identity. No local tests or game execution were performed.
 
 On clients with the native v1 meter API, Damage Done and Boss Damage show the
 received caster name beside each pet, summon or totem spell, such as
-`Shadowbolt (Imp)`. Player spells keep their own rows. The meter uses recorded
+`Shadowbolt (Imp)`. When the received ability and caster display names match
+exactly, omit the repeated suffix: `Searing Totem` stays `Searing Totem`.
+This changes only the caption; player and pet damage keep their recorded
+identities even when the visible names match. Player spells keep their own rows. The meter uses recorded
 actor identities, including contributors that have despawned, rather than
 matching names or observing the current pet.
 
@@ -248,7 +303,7 @@ spell/proc rows can still have different colors.
 
 This changes presentation only. Native source records and IDs, counters, rates
 and checkpoint fences remain intact. Display families retain distinct accepted
-talent origins. Pending or missing talent
+talent identities, with explicit rank normalization as described above. Pending or missing talent
 art uses the shared neutral icon; native metadata revisions refresh names and
 artwork through the existing pooled presentation. Both Performance Mode states
 use the same instant result and hidden/off work stays deferred. CI-only mocks

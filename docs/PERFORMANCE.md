@@ -103,6 +103,25 @@ getter, animation, frame, region, asset, event, updater, setting or saved data i
 added. Hidden/off retirement remains shared. CI-only source mocks were authored
 but not run locally; live Hakkar metadata and rendering remain unverified.
 
+Talent-rank summaries reuse the same pool and publication/member caches.
+Direct talent keys and accepted actual-origin talent keys normalize only during
+changed identity/attribution or relevant metadata preparation. Counter-only
+refreshes do not rebuild them. Prepared rank rows retain scalar origin-rank,
+ambiguity-slot and exact-member fields. Validated known ability procs additionally
+retain their actual origin ID and use its talent rank for presentation; triggering
+ability/rank slots distinguish ambiguity without splitting one talent by its
+triggers or inventing a missing rank. Each such family lazily reuses one
+rank-to-origin-ID map, bounded by its current members and cleared on mapping
+changes. These maps retire with their families and retain no native leaf Stats.
+Item components, explicit variants, owner/caster/proc distinctions, native
+amounts, rates and checkpoints remain intact. Both Performance Mode states
+update instantly, and hidden/off work remains deferred. No frame, region,
+asset, native getter, event, updater, setting or saved data is added. CI-only
+cases cover counter-only key reuse, upgrades, ambiguity, missing rates, art
+readiness, resets, ranked/unranked and different ability triggers, and
+visible/hidden row reuse in both modes; they were authored
+without local execution and do not prove live FPS or appearance.
+
 ## Meter processing and display caches
 
 The meter and Pet frames fully hide during native `choosing` at their existing
@@ -213,6 +232,26 @@ cover growing ledgers, cache invalidation, viewport work, native history cadence
 and early row-piece gates. No local tests, game execution, late-run frame timings
 or FPS measurements were performed.
 
+## Meter hover IDs
+
+Native meter hover IDs reuse the adapter's existing scalar source/actor and
+positive-member origin fingerprints. Only an entered or changed hover calls
+the descriptor; steady hovered numeric updates reuse its text. A first or
+invalidated hover searches the selected view's cached rows/pool, with no native
+getter or full snapshot retention. One lazy reusable buffer per adapter holds
+at most 24 lines for up to three native rows and three actual origins per row;
+there is no cache for every visited row. Relevant identity/metadata changes
+invalidate it, and Reset/checkpoint retirement/Clear release it. No formatting
+runs for unhovered, hidden or off rows. Existing tooltip ownership, pooling,
+one-second numeric updates and instant behavior in both Performance Mode states
+remain intact. No addon-owned frame, region, asset, event, updater, setting or
+SavedVariable is added. The existing shared GameTooltip supplies its native
+line pool for the heading and diagnostic lines; that native cost is not
+measured here. CI-only cases cover lazy preparation, unchanged reuse, bounds,
+metadata changes with identical captions/counters, native proc distinctions,
+positive origins, foreign tooltip ownership and hidden cleanup. These are not
+live rendering or FPS measurements; no local tests or game execution ran.
+
 ## Meter talent proc captions
 
 Talent proc captions reuse the same snapshot member caches and pooled rows.
@@ -233,6 +272,9 @@ existing snapshot read. Recorded actor names distinguish pet spells without
 current-pet scans or name-based attribution. An explicit native summon/totem key
 groups matching kinds for one owner across incarnations; otherwise the actor
 identity stays separate. Native spell-rank grouping retains that caster scope.
+An exact ability/caster display-name match skips the redundant suffix during
+existing changed-only caption preparation. It adds no lookup, cache, read or
+per-frame work and never merges identities; both modes share the same result.
 
 The default-off `meterGroupPets` choice in the existing display table combines
 pet spell rows through the same pooled presentation copies. Actual choice
@@ -345,6 +387,35 @@ managed. This adds no region, event, updater, binding retry or per-refresh work;
 badge fitting and the existing stored-level controller remain unchanged.
 These are source-level costs; handheld readability, glyph coverage and native
 rendering remain unverified. See [FONTS.md](FONTS.md).
+
+## Native world combat text — 2026-11-01
+
+The optional version 1 consumer reuses the original SCT controller and pooled
+holders, with no additional frame, region, asset, event, updater or SavedVariable.
+It selects one native transport for enemy-origin styles and releases the forced
+invisible plate feed; ordinary user-requested nameplate styling stays active.
+MSBT and unsupported builds retain their established paths.
+
+An enabled native consumer reads at most 256 events in one frame and retains a
+bounded 4096-ID duplicate window. It copies only accepted hit fields/handles;
+raw native snapshots are not retained. Only active labels request projection,
+in batches of at most 256 with one coherent camera sample across chunks. Empty
+active lists do no native projection or animation work. Off/hidden/world-retired
+consumers do not read the native event feed. Native failures retire presentation
+and throttle re-priming to half-second retries through the existing controller.
+
+Current-camera world projection, offscreen hiding and bounded depth scaling are
+identical in both Performance Mode states. Distance multiplies the existing
+animation scale, with no extra effect loop or unchanged scale writes. Hidden
+labels keep expiring while skipping font/geometry/animation writes; they do not
+restart on reappearance. The original 75 ms duplicate suppression and Performance
+Mode's 300 ms same-attack sums remain distinct and preserve original hit amounts.
+
+CI-only production-boundary cases cover these paths, errors and cleanup. They
+were not run locally and establish neither native API availability/cost nor live
+camera alignment, late-run FPS or appearance. See the
+[provider proposal](COMBAT-TEXT-WORLD-ANCHOR-API-PROPOSAL.md) for the required
+death-anchor, event ordering and current-frame sampling guarantees.
 
 ## Diablo IV combat text — 2026-10-30
 
@@ -1798,11 +1869,24 @@ and retirement. This is native-call reduction, not a changed drawing budget.
 
 Shared tooltip placement first checks its last accepted icon with native IsOwned.
 An unchanged owner skips action/equipment/registered-icon traversals; a mismatch
-uses the original discovery order. Clear/Hide retires the cached owner, while
-foreign owners and native resets remain observable. Cursor motion, current
+uses the original discovery order. Content clears retire the cached icon;
+Hide releases the observed owner. Foreign owners and native resets remain
+observable. Cursor motion, current
 visibility, scale and anchor checks still run at their existing cadence. CI-only
 placement assertions cover the single-owner check and replaced-owner fallback.
 No new registry, event, region or drawing pass is introduced.
+
+Tooltip Layout hiding and scale exempt action/equipment cards and directly
+observed non-world UI owners, so native ability/item details remain available.
+The controller captures one original native scale and reuses the existing owner
+and icon caches; content clears retain only an owner still confirmed by native
+`IsOwned`, while Hide/world retirement releases it. World hovers and registered
+HUD hints retain shared hiding/scale. Both Performance Mode states use the same
+instant behavior, existing visible updater and changed-only writes. No native
+tooltip preference is read or written, no content is copied, and no new frame,
+region, event, setting or saved state is added. CI-only lifecycle cases were
+authored without local execution; native appearance and event order remain
+unverified.
 
 ### Shared spellbook generations
 
@@ -2331,7 +2415,7 @@ kept separately so normal native state can resume on showing.
 | `chat`              | Its cosmetic updater inherits native hiding; native hooks skip hidden font/geometry/indicator work. Show repairs native presentation. Native messages, level/stat batching, history, opt-in capture and the separately parented command input remain available.                                                                                                                   |
 | `copyWindow`        | No idle updater. Opening while Layout-hidden only establishes the lazy edit owner/requested visibility; it skips archive-page preparation and invisible focus. Existing close cleanup and capture policy remain.                                                                                                                                                                  |
 | `menu`              | No idle updater or hidden decorative controller. Game-owned commands/window actions keep their existing behavior.                                                                                                                                                                                                                                                                 |
-| `tooltip`           | Hide clears the current native hover immediately. Hidden ancestry prevents positioning/styling updates; no subject is forced visible on Show. Native content/owner and separate private readers stay native.                                                                                                                                                                      |
+| `tooltip`           | Hide clears world hovers and registered HUD hints immediately, preventing their positioning/styling updates. Ability/equipment cards and directly observed non-world UI owners keep native scale and availability. No subject is forced visible on Show; editing/world cleanup still retire shared cards. Native content and private readers stay native.                         |
 
 The shared grid, handles and numeric/editor bounds remain active while editing,
 including for hidden elements: they are the controls needed to show them again.
