@@ -98,8 +98,13 @@ Action-bar choice cases use the production display/bar owners and explicit fake
 native frames. They cover default-on normalization, shared preview/Confirm/Cancel,
 profiles and resets, native presentation restoration, retained attachment
 choices with detached jewelry/counters, SDUI XP hiding, disabled dependent
-controls and both Performance Mode states. These cases remain CI-only and were
-not run locally; they do not prove native input or in-game appearance.
+controls and both Performance Mode states. Max-level cases cover a 119→120
+transition, repeated native Show calls and direct native OnShow delivery,
+already-capped reacquisition, native-mode restoration of latest Show/Hide
+requests and callbacks, Cancel, world/release cleanup and pool reuse. Bar
+snapshots must leave the XP owner's max-level frame, descendants and hooks
+untouched. These cases remain CI-only and were not run locally; they do not
+prove native input or in-game appearance.
 
 The native API draft adds production-boundary fixtures for the v1 meter adapter,
 complete meter view, retained portrait circle helper, native language selection
@@ -267,7 +272,9 @@ Player-absorb cases exercise the production resource reader, player absorb
 owner and shared health labels. They cover current amount and uncapped
 percentage of received maximum HP, independent text choices, shortening,
 deferred run reads, Performance Mode text without overlay allocation, invalid
-data, hidden work, phase/zone/world retirement, failed text/texture retries and
+data, silver fill and a dark bounded divider over mage/default health colours,
+sub-unit shields, resize and pool reuse, hidden work, phase/zone/world retirement,
+failed text/fill/divider texture retries and
 unchanged formatting/writes/allocations. The native boundaries are explicit;
 no buff values, capacity history or client files are read. Coverage is CI-only
 and was not executed locally.
