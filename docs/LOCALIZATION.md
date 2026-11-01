@@ -1,5 +1,14 @@
 # Languages
 
+The Damage meter Bar colors selector, ability/proc captions and Default/Custom
+hints use all fourteen source/runtime UI catalogs. RGB hex values remain literal
+and the optional game's picker retains its own native localization.
+
+The Area of Effect caption is present in all fourteen `localization/ui.tsv`
+and runtime UI catalogs; the compact category control has no description. Spell classification
+uses received IDs or exact existing canonical name aliases; it adds no
+translated spell-name list or inferred language state.
+
 SurvivorsDragonUi includes English, Polish, Czech (**Čeština**), German, Brazilian Portuguese, Spanish, French, Romanian, Turkish, Russian, Ukrainian, Simplified Chinese, Japanese and Korean. `core/localization.lua` supplies the shared text functions; `localization/data.lua` contains the generated runtime text. Both load before the editor and HUD modules.
 
 ## Following the game

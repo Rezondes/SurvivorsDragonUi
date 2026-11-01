@@ -1,5 +1,113 @@
 # DPS meter
 
+## Bar colors
+
+In `/sdui` → **Damage meter**, **Bar colors** sits below **Enable damage meter**
+and above the **Ability color** and **Proc color** fields. Select **Default** or **Custom**.
+Default distinguishes the kind of damage before applying spell-school colors:
+
+| Damage category                    | Color                     |
+| ---------------------------------- | ------------------------- |
+| Periodic damage / damage over time | Green                     |
+| Melee / basic attacks              | Silver                    |
+| Talent damage                      | Violet                    |
+| Item effects                       | Amber                     |
+| Other procs                        | Blue                      |
+| Other abilities                    | Their damage-school color |
+
+Periodic damage takes priority when the game identifies all of a row's damage
+as periodic. The other categories use native source metadata and proc flags.
+For example, periodic poison damage is green even when its supplied school is
+Physical. No poison names, icon colors or current equipment are used to guess.
+Talent-colored rows use a direct talent descriptor or the existing validated
+actual-talent presentation; an ability merely related to a talent does not
+become talent damage.
+
+Remaining abilities use these received schools:
+
+| School   | Color      |
+| -------- | ---------- |
+| Physical | Yellow     |
+| Holy     | Light gold |
+| Fire     | Orange     |
+| Nature   | Green      |
+| Frost    | Cyan       |
+| Shadow   | Violet     |
+| Arcane   | Pink       |
+
+Known hybrid schools blend their native mask's school colors. Unknown,
+unavailable or conflicting types retain class-color fallback for ordinary
+abilities. Mixed families retain only categories shared by all constituents;
+a mixed ability/talent family keeps normal ability presentation unless all of
+its damage is periodic. Legacy builds without source/category metadata retain
+the existing class/blue-proc fallback. Names and icons never establish a school.
+
+Custom enables separate **Ability color** and **Proc color** controls. Click a
+swatch to use the game's color picker, or enter a six-digit RGB hex value such
+as `#FF8800`. The hex fields also work when the native picker is unavailable.
+Party rows keep their class colors. The existing textured bar artwork is used
+with either palette.
+
+Valid colors preview immediately. Enter or leaving the field finishes its text
+edit; Escape restores its color from before typing. Cancel in the native picker
+restores the color from before opening it. The settings window saves only with
+Confirm; its Cancel/discard paths and profiles include the palette. Returning to
+Default retains the custom choices for later. Missing/invalid saved preferences
+and both full resets select Default; custom defaults are gold `CCA147` and blue
+`4094FF`.
+
+The three scalar preferences live in the existing display table. RGB strings
+normalize to six uppercase hex digits, accepting an optional leading `#`;
+malformed values fall back when loading and are ignored while editing. The
+native picker accepts finite RGB channels only, disables opacity editing and
+uses owned callbacks with initialization guards. Its owned session temporarily
+borrows the settings strata and a higher frame level, restoring its captured
+native layer on release. Retirement closes/restores only
+the owned session, preserving a foreign callback handoff. No global picker
+script is replaced, and missing native functions leave hex input usable.
+
+The renderer caches the active palette and decodes changed custom colors once
+through the display listener. Visible rows include its revision in their color
+inputs and write only changed final RGB values. Default-mode edits to retained
+custom choices do not invalidate presentation. Both Performance Mode states use
+the same instant presentation; hidden/off meters defer painting, and existing
+show/world/row retirement paths reuse the pool. Counters, native rates, proc
+classification, reset checkpoints and attribution are unchanged. The CI-only
+editor/native/legacy cases were authored without local execution; native picker
+availability and live appearance remain unverified.
+
+Native v1 school colors join each display row's received `memberIds` to its
+same-snapshot contributions through the existing validated owner/caster/source/
+proc boundary. Every positive member must have `schoolState = "known"` and agree
+on one finite integer `schoolMask` in `1..127`. Missing, malformed, unjoined or
+conflicting members leave the row's school unknown. Zero-display historical
+members cannot supply or block a post-Reset school. Rank/item/talent families
+and optional pet summaries retain their original grouping and get a school only
+when every constituent row agrees; mixed rows keep the previous fallback.
+Actual multi-bit masks are distinct from conflicts between different members.
+
+The adapter retains the received display source kind and one all-periodic flag
+beside the school scalar. That flag uses the same exact member join: every
+positive contribution must have `creditKind = "health_damage"` and
+`periodicity = "periodic"`. Missing/malformed periodicity, other credit kinds,
+unjoined members and direct/periodic mixtures leave it unset. Zero-display
+history does not vote. Item-family classification uses only the existing
+validated item family, without another origin lookup.
+
+The adapter copies these scalar color inputs during its existing
+member pass, without retaining new leaf tables or duplicating the contribution
+index. School/periodicity-only changes do not invalidate attribution fingerprints, rate
+identities, checkpoints, captions or artwork. Family sums refresh their school
+inputs without regrouping. The visible viewport copies those scalars through its
+existing sampling pass, and row color caches include them only for Default.
+Five category colors, seven base colors and at most 120 lazily resolved hybrid colors form one bounded
+renderer palette; RGB resolution and writes happen only when relevant inputs
+change. There is no new setting, API getter, gameplay region or updater for
+automatic colors. CI-only cases cover exact types across identical captions,
+same-school melee/periodic/talent/item/proc distinctions, hybrids, malformed/unknown
+data, member/family agreement, Reset,
+rate-identity preservation, hidden reuse and Custom precedence.
+
 ## Native version 1 data path
 
 Clients implementing the [version 1 contract](DAMAGE-METER-AND-INSTANCE-PLAYER-POSITION-API.md#3-version-1-implementation-contract)
@@ -93,7 +201,11 @@ view name. Both header fields start on. All seven options use the same preview, 
 Cancel, profile and reset behavior. Healing uses healing totals and HPS.
 Hover still provides the full name and numbers when row values are hidden.
 
-Native v1 rows also show **Native IDs** in that tooltip. The technical field
+Hold **Shift** over a native v1 row to show **Native IDs** in its tooltip.
+Without Shift, the tooltip shows its usual name, damage, DPS, average and share.
+Pressing or releasing Shift while the pointer stays over the row updates the
+section through the existing controller, without another combat-data read.
+If the Shift getter is unavailable, diagnostics stay hidden. The technical field
 names stay as the API spells them: `rowId`, `sourceKey`, `ownerId`, `actorId`,
 `nativeProc`, `kind`, `attribution` and `rank`, plus supplied ability, talent,
 variant and item IDs. Accepted positive members supply actual
@@ -105,7 +217,8 @@ This helps compare two equally named rows that still have separate DPS. A
 combined row can include several native source records. The tooltip shows at
 most three records and three actual origins per record, within 24 diagnostic
 lines; `...` marks omitted details. It makes no additional native read. Text is
-prepared only on hover and reused while identities and metadata stay unchanged.
+prepared only on a Shift-held hover and reused while identities and metadata
+stay unchanged. Ordinary hovers never request the diagnostic descriptor.
 Both Performance Mode states share this static behavior. Legacy meters keep
 their existing statistics tooltip because they do not supply these IDs.
 
@@ -169,6 +282,72 @@ off and numbers-off views skip measurement. Both Performance Mode states use
 the same instant reflow, without a new region, asset, event or updater. CI-only
 production-meter cases cover the layout and font lifecycle; no local tests or
 addon/game execution were run, and native glyph fit remains unverified.
+
+## Exact ability/talent key pairs
+
+Native v1 Damage Done and Boss Damage combine an ability and talent when their
+received keys match exactly as `<class>.<abilityKey>_talent`. For example,
+`rogue.blade_flurry_talent` pairs with `blade_flurry`. The class prefix must be
+one of the nine recognized native classes; spelling and case remain exact.
+There is no per-ability allowlist. Talents without the exact suffix, partial
+matches, similar names and matching icons never establish a pair.
+
+A static read of the installed executable's 355 talent definitions and 114
+ability definitions found these three suffix matches:
+
+| Native talent key           | Native ability key | Received talent / ability names |
+| --------------------------- | ------------------ | ------------------------------- |
+| `rogue.blade_flurry_talent` | `blade_flurry`     | Blade Flurry / Blade Flurry     |
+| `priest.holy_nova_talent`   | `holy_nova`        | Radiance / Holy Nova            |
+| `priest.holy_fire_talent`   | `holy_fire`        | Purifying Flame / Holy Fire     |
+
+The native game records these effects separately. Combining their presentation
+is an addon choice, not proof that their gameplay effects are identical. The
+row adds same-snapshot native amounts and supplied recent/average rates;
+an unavailable input rate remains unavailable. Native IDs keeps the original
+ability/talent source IDs, row IDs, proc flags and actual origins.
+
+Only known non-proc ability records and known proc talent records participate.
+Both need positive integer ranks and the same received owner, actual caster
+and variant/item components. An optional ability/talent component must agree
+with the same exact pair. Different class prefixes for one ability stem make
+the family ambiguous, even across different talent ranks, and retain the raw
+rows. Item families and optional pet summaries keep their existing precedence.
+Ordinary skill grouping across repeated native summon definitions stays unchanged;
+a mixed skill/talent family with conflicting actual casters retains its raw rows.
+Queries without an actual caster, Healing Done, Party and the legacy path
+retain their established behavior.
+
+The highest positive ability rank supplies the received name and artwork;
+the highest positive talent rank supplies them while no ability contributes.
+Zero-display history after Reset cannot choose the caption. Kind/proc/rank
+slots preserve same-rank source ambiguity instead of silently merging it. A
+mixed family uses the normal ability presentation; Default still prefers an
+agreed native damage school, and Custom uses its ability color. Raw proc flags
+remain visible in Native IDs.
+
+The existing family pool handles sums, sorting, checkpoints and retirement.
+Caption priority and exact talent identity are cached with changed source
+metadata, so counter-only updates keep the existing display/rate identities.
+Both Performance Mode states are instant, with hidden/off deferral and no new
+control, region or updater. CI-only cases are authored without local execution;
+actual in-game presentation remains unverified.
+
+Catalog provenance: executable SHA-256
+`eb5fd1c1b96e6180fcf5f3d685d90a61471af28d22e5f060c02b7b7663fbf79e`.
+The class index starts at file offset `0x71460f8`: nine 200-byte records,
+three 64-byte trees each, with native pointer/count slices of 176-byte talent
+records. Keys and names are at +64/+80. The ability table is the same pinned
+114-record table used by [SCT spell data](SCT-SPELL-DATA.md). REA/Ghidra 12.1.4
+also read the bounded original region `0x7128538..0x7146800`, SHA-256
+`d88ffec25297aa1d0052c0e4e9b9489b8f0f315ae1ac1eb6029005cfe60bb4d6`;
+its suffix search returned these three candidates and its complete 1,800-byte
+index read retained all class/tree descriptors. This is static catalog evidence,
+not game execution or a claim about every talent's damage attribution.
+REA evidence: suffix search
+`ev_e35af9eaa5af4954515ed1e77c20dbe9e30cacd2ed1550c25adc5b80ba9d429a`;
+index read
+`ev_394146680745e93c61e4fb6c71be5afb34a92a9dfe629e406b93b71b26791696`.
 
 ## Ability ranks
 
@@ -289,8 +468,9 @@ described above rather than a caster spell row or pet summary.
 
 Pet summaries add their disjoint native amounts and rates, retaining the
 selected native window and checkpoint. A missing member rate keeps the combined
-rate unavailable. All-proc summaries retain the proc color; mixed summaries use
-the normal class color. They do not change native counters,
+rate unavailable. Summaries follow **Bar colors**: Default uses an agreed known
+school, with the proc/class fallback otherwise; Custom uses the proc color for
+all-proc summaries and the ability color for mixed summaries. They do not change native counters,
 header totals or Reset. Healing Done, Party Damage and the legacy meter path
 keep their existing grouping. Both Performance Mode states show the same
 instant result; hidden/off work remains deferred. CI-only mocks cover native
@@ -310,8 +490,9 @@ Every positive displayed contribution in the row must identify the same single
 actual talent origin in that snapshot. Definition-level associations do not
 establish that attribution. Missing, mixed, multiple or invalid origins keep
 the received source caption and artwork. Zero-display history does not supply
-post-Reset attribution. Native proc colors remain unchanged, so two related
-spell/proc rows can still have different colors.
+post-Reset attribution. Native proc classification remains unchanged. Default
+colors use the received damage school regardless of the talent caption, and
+Custom retains its separate ability/proc colors.
 
 This changes presentation only. Native source records and IDs, counters, rates
 and checkpoint fences remain intact. Display families retain distinct accepted
@@ -619,7 +800,7 @@ They skip cosmetic row formatting, icon lookup/binding, tooltip repaint and bar 
 Requested root visibility changes only on transitions. Repeated unavailable
 reads do not keep clearing an already-cleared view. Visible rows cache formatted
 values, and a hovered tooltip rebuilds only when its source, displayed numbers,
-view, language or effective scale changes; a tooltip taken or hidden by another
+view, language, Shift state or effective scale changes; a tooltip taken or hidden by another
 native owner is not reclaimed by the periodic update.
 
 The `meterRows` integer belongs to the existing `SurvivorsDragonUiDisplay`

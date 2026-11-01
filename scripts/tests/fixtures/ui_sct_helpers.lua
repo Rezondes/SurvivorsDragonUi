@@ -3,11 +3,15 @@ local H = dofile("scripts/tests/fixtures/ui_helpers.lua")
 local function SCT(scrolling, setup)
     local context = H.New()
     local env = context.env
+    -- Production localization initializes these before SCT; aliases stay explicit
+    -- fixture data rather than loading any client catalogs.
+    env.DFRL.locale.code, env.DFRL.locale.data = "en", { en = { spellNames = {} } }
     context.settings.sctStyle = scrolling and "msbt" or "enemy"
     context.settings.sctScale = 1
     context.settings.sctFont = "default"
     context.settings.sctShortNumbers = false
     context.settings.sctDistanceScaling = false
+    context.settings.sctAreaDamage = true
     context.settings.sctNormalHits, context.settings.sctCriticalHits = true, true
     context.settings.sctAutoAttacks, context.settings.sctMisses = true, true
     context.settings.damageIcons, context.settings.nameplatesBossGuardiansOnly = false, false
@@ -123,6 +127,7 @@ local function SCT(scrolling, setup)
     if setup then setup(context, env) end
     context:Load("core/widgets.lua")
     context:Load("core/combat_text_api.lua")
+    context:Load("modules/nameplates/spell_data.lua")
     context:Load("modules/nameplates/sct.lua", "NameplateCombatText")
     context.controller = context:Controller("TEST_COMBAT")
     function context:Hit(amount) self:Event(self.controller, "TEST_COMBAT", tostring(amount)) end

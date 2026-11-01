@@ -22,6 +22,63 @@ DFRL:NewMod("DamageMeter", 7, function()
     for key, setting in pairs(optionKeys) do
         options[key] = DFRL.display.Get(setting)
     end
+    local palette = { revision = 0 }
+    local function ReadPalette()
+        local mode = DFRL.display.Get("meterColorMode")
+        local ability, proc = DFRL.display.Get("meterAbilityColor"), DFRL.display.Get("meterProcColor")
+        if palette.initialized and palette.mode == mode and palette.ability == ability and palette.proc == proc then
+            return false
+        end
+        local changed = not palette.initialized or palette.mode ~= mode or mode == "custom"
+        palette.initialized, palette.mode, palette.ability, palette.proc = true, mode, ability, proc
+        if not changed then return false end
+        palette.revision = palette.revision + 1
+        if mode == "custom" then
+            palette.red, palette.green, palette.blue = DFRL.display.ColorRGB(ability)
+            palette.procRed, palette.procGreen, palette.procBlue = DFRL.display.ColorRGB(proc)
+        end
+        return true
+    end
+    ReadPalette()
+    local schoolColors = {
+        [1] = { 1, 1, 0 },
+        [2] = { 1, 0.9, 0.5 },
+        [4] = { 1, 0.5, 0 },
+        [8] = { 0.3, 1, 0.3 },
+        [16] = { 0.5, 1, 1 },
+        [32] = { 0.5, 0.5, 1 },
+        [64] = { 1, 0.5, 1 },
+    }
+    local function SchoolColor(mask)
+        if type(mask) ~= "number" or mask < 1 or mask > 127 or mask ~= math.floor(mask) then return end
+        local color = schoolColors[mask]
+        if color then return unpack(color) end
+        -- A native hybrid school is explicit; blend its bits once and reuse it.
+        local red, green, blue, count, bit = 0, 0, 0, 0, 1
+        for _ = 1, 7 do
+            if math.mod(math.floor(mask / bit), 2) == 1 then
+                local base = schoolColors[bit]
+                red, green, blue, count = red + base[1], green + base[2], blue + base[3], count + 1
+            end
+            bit = bit * 2
+        end
+        red, green, blue = red / count, green / count, blue / count
+        schoolColors[mask] = { red, green, blue }
+        return red, green, blue
+    end
+    local categoryColors = {
+        periodic = { 0.35, 0.84, 0.36 },
+        basic_attack = { 0.72, 0.75, 0.8 },
+        talent = { 0.72, 0.48, 1 },
+        item = { 1, 0.62, 0.2 },
+        proc = { 0.25, 0.58, 1 },
+    }
+    local function DefaultColor(entry)
+        local color = entry.periodicDamage and categoryColors.periodic or categoryColors[entry.colorKind]
+        if color then return unpack(color) end
+        if entry.proc == 1 then return unpack(categoryColors.proc) end
+        if entry.schoolMask then return SchoolColor(entry.schoolMask) end
+    end
     local ICON_SIZE, RIM_SIZE = 26, 31
     local PARTY_COLOR = { 0.6, 0.6, 0.6 }
     local UNKNOWN_ICON = T.SourceIconFallback
@@ -342,6 +399,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             tooltipState[key] = nil
         end
     end
+    local function ShiftHeld() return type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and true or false end
     local function ShowRowTooltip(row)
         if editing or not row.entry or not row:IsVisible() or not GameTooltip then return end
         local entry, language, scale = row.entry, DFRL.locale.code, GameTooltip:GetEffectiveScale()
@@ -351,12 +409,17 @@ DFRL:NewMod("DamageMeter", 7, function()
         local reset = IsReset()
         local share = string.format("%.1f%%", entry.share * 100)
         local source, identity = apiActive and snapshot.source or nil, apiActive and entry.rateIdentity or nil
-        local details = tooltipState.details
+        local debug = source ~= nil and ShiftHeld() or false
+        local details = debug and tooltipState.details or nil
         if
-            hovered ~= row
-            or tooltipState.source ~= source
-            or tooltipState.rowId ~= entry.rowId
-            or tooltipState.identity ~= identity
+            debug
+            and (
+                not tooltipState.debug
+                or hovered ~= row
+                or tooltipState.source ~= source
+                or tooltipState.rowId ~= entry.rowId
+                or tooltipState.identity ~= identity
+            )
         then
             details = source and type(api.Describe) == "function" and api.Describe(source, entry.rowId) or nil
         end
@@ -374,6 +437,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             and tooltipState.source == source
             and tooltipState.rowId == entry.rowId
             and tooltipState.identity == identity
+            and tooltipState.debug == debug
             and T.NearlyEqual(tooltipState.scale, scale)
         then
             return
@@ -400,6 +464,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         GameTooltip:Show()
         tooltipState.name, tooltipState.damage, tooltipState.rate, tooltipState.share = entry.name, damage, rate, share
         tooltipState.average, tooltipState.reset = average, reset
+        tooltipState.debug = debug
         tooltipState.mode, tooltipState.language, tooltipState.scale = mode, language, scale
         tooltipState.source, tooltipState.rowId, tooltipState.identity, tooltipState.details =
             source, entry.rowId, identity, details
@@ -983,6 +1048,9 @@ DFRL:NewMod("DamageMeter", 7, function()
                 copy.portraitKey, copy.portraitRunId = entry.portraitKey, entry.portraitRunId
                 copy.portraitStatus = entry.portraitStatus
             end
+            copy.schoolMask = apiActive and entry.schoolMask or nil
+            copy.colorKind = apiActive and entry.colorKind or nil
+            copy.periodicDamage = apiActive and entry.periodicDamage or nil
             local key = apiActive and copy.rowId or copy.name
             local samples = rateSamples[key]
             if not samples then
@@ -1032,6 +1100,9 @@ DFRL:NewMod("DamageMeter", 7, function()
         local party = modes[mode].party
         local classColor = party and PARTY_COLOR or T.GetPlayerClassColor() or { 0.8, 0.63, 0.28 }
         local classRed, classGreen, classBlue = unpack(classColor)
+        if not party and palette.mode == "custom" then
+            classRed, classGreen, classBlue = palette.red, palette.green, palette.blue
+        end
         if party and options.icons and not apiActive then
             if snapshot.count > 0 then
                 ReadPartyUnits()
@@ -1087,6 +1158,15 @@ DFRL:NewMod("DamageMeter", 7, function()
                     or row.colorRed ~= classRed
                     or row.colorGreen ~= classGreen
                     or row.colorBlue ~= classBlue
+                    or row.colorPalette ~= palette.revision
+                    or (
+                        palette.mode ~= "custom"
+                        and (
+                            row.colorSchoolMask ~= entry.schoolMask
+                            or row.colorKind ~= entry.colorKind
+                            or row.colorPeriodic ~= entry.periodicDamage
+                        )
+                    )
                 then
                     local r, g, b = classRed, classGreen, classBlue
                     if party then
@@ -1096,13 +1176,23 @@ DFRL:NewMod("DamageMeter", 7, function()
                         else
                             r, g, b = 0.6, 0.6, 0.6
                         end
-                    elseif entry.proc == 1 then
-                        r, g, b = 0.25, 0.58, 1
+                    elseif palette.mode == "custom" then
+                        if entry.proc == 1 then
+                            r, g, b = palette.procRed, palette.procGreen, palette.procBlue
+                        end
+                    else
+                        local red, green, blue = DefaultColor(entry)
+                        if red then
+                            r, g, b = red, green, blue
+                        end
                     end
                     if row.red ~= r or row.green ~= g or row.blue ~= b then row.bar:SetStatusBarColor(r, g, b) end
                     row.red, row.green, row.blue = r, g, b
                     row.colorParty, row.colorProc = party, entry.proc
                     row.colorRed, row.colorGreen, row.colorBlue = classRed, classGreen, classBlue
+                    row.colorPalette = palette.revision
+                    row.colorSchoolMask = entry.schoolMask
+                    row.colorKind, row.colorPeriodic = entry.colorKind, entry.periodicDamage
                 end
                 if options.icons then
                     local bound
@@ -1370,6 +1460,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         end,
     })
     DFRL.display.Listen(function()
+        local paletteChanged = ReadPalette()
         local enable = DFRL.display.Get("meterEnabled")
         local enabledChanged = enabled ~= enable
         local count = DFRL.display.Get("meterRows")
@@ -1394,6 +1485,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             and not fontChanged
             and not styleChanged
             and not windowChanged
+            and not paletteChanged
         then
             return
         end
@@ -1470,7 +1562,21 @@ DFRL:NewMod("DamageMeter", 7, function()
     Tick = function()
         if not inWorld then return end
         age = age + (tonumber(arg1) or 0)
-        if age < REFRESH_SECONDS then return end
+        if age < REFRESH_SECONDS then
+            if hovered and hovered.entry then
+                if
+                    not hovered:IsVisible()
+                    or not GameTooltip
+                    or not GameTooltip:IsVisible()
+                    or not GameTooltip:IsOwned(hovered)
+                then
+                    HideTooltip()
+                elseif tooltipState.debug ~= (apiActive and ShiftHeld() or false) then
+                    ShowRowTooltip(hovered)
+                end
+            end
+            return
+        end
         age = 0
         local ok, message = pcall(Refresh)
         ClearReadPass()

@@ -236,14 +236,83 @@ A successfully bound static native icon skips its helper while path and scale
 match. Failed bindings retry, and another binding path invalidates that cache.
 Retained native portrait-image checks and regular legacy resolver checks remain.
 Bar fractions recompute only when the row amount or leading amount changes.
-Non-Party colors reuse the common class color and check proc classification;
+Non-Party Default colors use a validated native school when available, with the
+common class/proc fallback; Custom uses the selected palette. Both check proc classification;
 Party class-palette validation continues through the regular reader. Pool
 retirement clears settled presentation state, while hovered tooltips retain
 their source/value and native ownership checks. The one-second data-reader
 cadence is unchanged.
 
-Both Performance Mode states use these same caches. No frame, drawing region,
-asset, setting, saved data, event, updater or runtime diagnostic hook is added.
+The **Bar colors** selector uses native damage schools for Default or applies
+separate custom ability/proc RGB choices. Its existing display listener decodes
+changed active custom colors once and invalidates row color inputs through a
+scalar palette revision. Retained custom changes while Default is active do not
+invalidate meter presentation. RGB writes still compare the final channels;
+Party continues validating class colors through its existing reader. Hidden/off
+meters defer color painting and reuse their existing rows on return. There is
+no new meter getter, frame, region, artwork, event, updater or animation, and
+both Performance Mode states share the instant behavior.
+
+Exact `<class>.<abilityKey>_talent` display pairs reuse the existing
+family path. Canonical suffix/key/role checks run only during changed-row
+preparation, after item-family and optional pet-summary selection. Owner,
+actor identity and variant/item boundaries remain in the key; separate
+kind/proc/rank slots reuse the existing ambiguity map. One optional per-row
+caption priority and one family priority select the highest positive ability
+rank ahead of talent ranks. One exact-talent scalar per row/family rejects
+conflicting class prefixes at every rank. Two family scalars retain the role mix
+and actual-caster conflict, reusing the existing actor scalar. Only mixed
+ability/talent families require one exact caster; ordinary repeated-summon skill
+grouping keeps its existing native definition identity. Families accumulate mixed-proc presentation
+independently of caption selection, while Native IDs keeps raw proc flags.
+Counter-only updates do no pairing/caption rebuild and preserve rate identities.
+The existing sum pass retains native amounts/rates and agreed school metadata,
+including Reset and hidden/world retirement. Both Performance Mode states stay
+instant. No extra member pass, native getter, frame, region, asset, setting,
+SavedVariable, event or updater is added. CI-only grouping/identity/pooling
+cases do not establish live appearance or measured performance.
+
+Default coloring reuses the adapter's validated ID/origin member pass for
+school and periodicity agreement. It reads the native school pair plus
+`periodicity` and `creditKind` from each positive member, retaining one agreed
+school and one all-periodic flag per row. Unknown/malformed/unjoined/conflicting
+members fall back; zero-display history never votes after Reset. The display
+source kind is captured during existing changed-row preparation, reusing the
+validated talent/item display paths without another origin lookup. Existing
+family sums keep a category only when kinds agree and a periodic flag only
+when every constituent is periodic; native grouping, counters and rates stay
+unchanged. School/periodicity-only changes do not invalidate attribution or
+rate fingerprints.
+
+The existing viewport pass copies the scalar inputs, and the Default color
+gate compares kind and periodicity alongside school before resolving RGB. Five
+static category colors distinguish periodic damage, basic attacks, talents,
+items and other procs; remaining abilities use seven base school colors and
+at most 120 lazily cached native hybrids. Settled rows do no RGB resolution or
+color writes. Custom ignores the automatic metadata and retains its original
+native-proc-based two-color palette. Party retains native class colors and
+legacy rows keep their class/proc fallback. Hidden/off work and both
+Performance Mode states retain their existing instant lifecycle. No source
+scan, extra member loop, native getter, gameplay region, setting, asset,
+animation or updater is added. CI-only category/member/family/Reset and pooled
+lifecycle cases do not establish live appearance, snapshot cost or FPS gains.
+
+The lazy meter settings add eight editor frames/widgets (two control frames,
+four buttons and two EditBoxes), 28 texture regions and eight explicitly created
+FontStrings. This includes the two mode buttons, their heading/description,
+two swatches, existing button chrome and recessed input edges. The existing
+native color picker is optional; hex inputs remain available without it. Owned
+picker callbacks, values and borrowed layering are restored on release, foreign callback takeovers are preserved
+and hidden/retired callbacks are inert. No picker OnUpdate, global script hook,
+separate SavedVariable or runtime test hook is added. CI-only cases cover
+normalization, preview/discard/profile/reset, picker initialization/cancellation
+and ownership, native/legacy row colors, Party preservation, unchanged writes
+and hidden reuse. They are source/lifecycle evidence, not live appearance or
+FPS measurements, and were not run locally.
+
+Both Performance Mode states use these same caches. The row-cache optimization
+itself adds no frame, drawing region, asset, setting, saved data, event, updater
+or runtime diagnostic hook.
 Fresh snapshots still require full native row validation and numeric processing;
 the native API still returns its complete ledger. Regular complete-snapshot
 reads fall from five to one per second; triggered reads remain available for
@@ -262,8 +331,14 @@ or FPS measurements were performed.
 ## Meter hover IDs
 
 Native meter hover IDs reuse the adapter's existing scalar source/actor and
-positive-member origin fingerprints. Only an entered or changed hover calls
-the descriptor; steady hovered numeric updates reuse its text. A first or
+positive-member origin fingerprints. Only a Shift-held native-row hover calls
+the descriptor; unshifted hovers retain just the ordinary figures and never
+prepare diagnostic text. The held state joins the existing tooltip fingerprint.
+The controller checks it before its one-second reader gate only while a visible
+row owns the visible tooltip, repainting once on press/release from cached data.
+Unchanged holds do no formatting/descriptor work, and unhovered, hidden/off,
+header and foreign tooltips do no Shift reads. Missing getters select no debug
+section. Steady shifted numeric updates reuse diagnostic text. A first or
 invalidated hover searches the selected view's cached rows/pool, with no native
 getter or full snapshot retention. One lazy reusable buffer per adapter holds
 at most 24 lines for up to three native rows and three actual origins per row;
@@ -276,7 +351,9 @@ SavedVariable is added. The existing shared GameTooltip supplies its native
 line pool for the heading and diagnostic lines; that native cost is not
 measured here. CI-only cases cover lazy preparation, unchanged reuse, bounds,
 metadata changes with identical captions/counters, native proc distinctions,
-positive origins, foreign tooltip ownership and hidden cleanup. These are not
+positive origins, Shift entry/press/release, missing modifier getters, foreign
+tooltip ownership and hidden cleanup. Modifier changes never collect a native
+snapshot. These are not
 live rendering or FPS measurements; no local tests or game execution ran.
 
 ## Meter talent proc captions
@@ -1137,6 +1214,23 @@ Retirement and world cleanup release every hit through the shared pool.
 Performance Mode's label sharing and drawing cost are unchanged. These are
 source-level costs, not measured FPS/GPU evidence; the authored burst, anchor,
 pooling and mode-transition cases remain CI-only and were not run locally.
+
+The default-on Area of Effect filter loads one generated catalog containing two
+lookup tables: native spell IDs and exact names for all 114 current ability
+records and their pulse IDs. Known native IDs take a direct lookup; legacy
+names reuse the current language's existing alias arrays. Classification runs
+once during damage intake, without another native getter, metadata scan,
+temporary table, event or updater. Pending/active records reuse one scalar flag;
+pool retirement clears it. Performance Mode's existing grouping identity adds
+that flag, preventing mixed sums from exchanging filter visibility. Preview
+uses the shared listener and cached flag without re-registering native handlers
+or restarting animations. Unknown effects retain their established display.
+Both modes share this filter. The lazy settings row adds one existing-style
+button, four texture regions and one FontString, with no gameplay region or
+new artwork. It uses the compact two-column category grid without a description;
+the existing page fits the final row. CI-only cases
+were authored without local execution. These are source costs, not measured
+FPS or current native cast-consumer parity. See [SCT spell data](SCT-SPELL-DATA.md).
 
 Only the kills/gold number presentation uses the five-second cadence. The initial
 valid display paints immediately, then changing packets, styles and widths
@@ -2544,6 +2638,16 @@ remain in place; this is not a claim that every remaining cost is eliminated.
 
 Native aura/timer rows (`modules/unit/auras.lua`) retain changed-slot reflow,
 hidden timer shutdown and required repair of native buff/enchant anchors.
+Native harmful buttons share one additional passive `DFRL_PlayerDebuffs` frame,
+with no additional gameplay texture or FontString. Its independent `debuffs`
+Layout entry reuses the shared lazy editor selection artwork and existing
+position/scale/visibility/profile lifecycle. Its default resolves below Buffs;
+explicit debuff geometry stays independent. Per-group dirty flags retain hidden
+work until Show and avoid settled icon scans. Native Show/Hide hooks reuse two
+callbacks total, each bound to its stable group parameter instead of a generic-for
+entry. They add no recurring work or allocation. Both Performance Mode states use
+the same instant layout, native durations, stacks, expiry, input and tooltips,
+with no new setting, asset, SavedVariable, event, reader or updater.
 The presentation applies only to `AZS_GetTimers()` talent/jewelry
 icons: they stay bright with no fade/dimming, added outer border or text underneath,
 at any remaining value. The timer-only native backdrop and its edge drawing are
@@ -2554,7 +2658,7 @@ group keeps received order at the chosen left/right anchor, without ready/waitin
 reflow. Remaining/full-wait/Ready tooltips and native timing stay current through
 the existing reader. Regular native aura duration captions, opacity, expiration,
 indices, counts, input and tooltips are unchanged. Both Performance Mode states
-share these paths, with no new reader, frame, region, event or updater.
+share these paths, with no new reader, drawing region, event or updater.
 Damage-loss artwork (`modules/unit/cut.lua`) installs its animation callback
 only for active fades and removes it when the fading pool is empty. These
 native repair and authored fade paths must not be removed as idle work.
@@ -2712,6 +2816,18 @@ The audit found and corrected local meter gaps:
 - The minimap clock skips identical minute text on its existing five-second
   timer, and the low-health overlay skips repeated Show/Hide calls while keeping
   its authored gradient animation and timing.
+
+The local-clock label and its existing hover frame now fit natural text width
+plus four units of raster/outline padding, retaining their right anchor and
+allowing leftward growth. The zone caption/button receive the remaining width;
+clock-off restores their centered full-width budget. A single retained cache
+keys measurements by caption, actual font/size/flags and frame effective scale.
+Settled samples compare only final widths, font and scale; font changes refit
+without extra local-time reads. Show/language recovery remeasure, hidden/off
+clocks do no metric reads, and missing metrics retry on the existing visible
+five-second worker before native handoff. Both Performance Mode states share
+this static path, with no new frame, region, artwork, event, setting or updater.
+CI-only geometry cases do not establish native rendering or FPS.
 
 All audit edits are made directly in the installed Git checkout and remain
 unstaged, uncommitted and unpushed. Local work used source/history review and

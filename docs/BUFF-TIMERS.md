@@ -1,7 +1,11 @@
 # Native timers in Buffs
 
 On Azeroth Survivors 0.115.0 or newer, the existing Buffs group shows received
-talent and jewelry timers alongside native buffs, debuffs and weapon enchants.
+talent and jewelry timers alongside native buffs and weapon enchants.
+Debuffs have their own group below Buffs. In `/sdui` → **Layout**, select
+**Debuffs** to move, scale or hide them separately, then Confirm to save.
+Cancel discards the preview; profiles and Addon defaults include both groups.
+
 The received timers occupy the first slots at the selected left or right anchor
 in their received order, including separate effects with the same name. Every
 timer icon stays bright, without fading or dimming, and has no text underneath
@@ -19,12 +23,30 @@ already out and their lifetimes.
 
 `modules/unit/auras.lua` owns both the original native buttons and a passive
 pool of timer buttons. Both use the same 28-unit icons, six-column wrapping,
-flip direction and existing `buffs` Layout entry. Native duration labels retain
-their original placement; API timer buttons have no countdown FontString. Changing
+flip direction and existing `buffs` Layout entry. Native harmful buttons
+`BuffButton16`–`BuffButton23` are reparented once to the sibling
+`DFRL_PlayerDebuffs` root and use the independent `debuffs` Layout entry.
+Each group starts its own six-column grid. The unsaved debuff default resolves
+below the current Buffs bounds, including buff row/scale changes; a saved/draft
+debuff position stays independent. Both groups retain a one-row editing bound
+when empty. Only harmful icon artwork uses the existing boss-debuff inset
+(`0.07`–`0.93` UVs), preventing its baked pale rim from peeking past the native
+colored overlay. The border's texture, crop and dispel tint stay native; ordinary
+buffs, weapon enchants and API timer artwork retain their full images. Both
+Performance Mode states use this static crop through existing layout calls,
+with no new region, asset, reader or updater.
+
+Native duration labels retain their original placement; API timer
+buttons have no countdown FontString. Changing
 the pool's visible row count updates measured bounds through shared Layout,
 preserving confirmed/draft center and scale and the default top-right edge.
 Move, resize, hide, Confirm, Cancel, profiles and both resets keep their existing
 ownership. New native auras do not need a separate layout path.
+
+Native Show/Hide hooks share one callback per group, bound through a stable
+function parameter. They never retain the generic-for entry, which becomes nil
+when iteration ends in the client's Lua 5.0. Original native scripts still run
+first; callbacks only mark their own group dirty and request the existing layout.
 
 Timer buttons have no cast, cancel-aura or other click action. Their hover uses
 shared `GameTooltip` and `RegisterTooltipIcon`. By default it follows below the
@@ -57,8 +79,13 @@ both the timer and run cache identities. Old packets cannot repopulate the view
 until new timer/run snapshots arrive. An unavailable phase, getter, clock or
 invalid timer list clears only the addon timer icons. The ordinary native aura
 buttons remain available on older clients. Both full resets clear the pool and
-resample eligible native state. No gameplay data is saved and no setting,
-SavedVariable, command, asset, dependency or additional runtime module is added.
+resample eligible native state. No gameplay data is saved.
+
+The separate Debuffs root adds one passive frame
+and reuses shared Layout selection artwork when editing; no gameplay drawing
+region, setting, SavedVariable, command, asset, event, reader, updater,
+dependency or additional runtime module is added. Both Performance Mode states
+share instant placement and per-group hidden deferral.
 
 ## Recovery and verification
 

@@ -191,8 +191,12 @@ rows with the same source ID but different native proc flags, avoid private
 display tokens and ignore zero-display origin history. The adapter prepares
 text lazily in one bounded reusable buffer, reuses it for counter-only changes,
 refreshes changed metadata and retires old handles on Clear. Full meter cases
-exercise unchanged hover writes, metadata changes with unchanged captions and
-amounts, foreign tooltip ownership and hidden work in both Performance Mode
+exercise ordinary unshifted figures without diagnostic preparation, Shift-held
+entry, press/release while already hovered, immediate modifier-only repaint
+without native snapshots, missing Shift getters and unchanged holds. Unshifted
+metadata changes defer diagnostic work until Shift; hidden/unhovered/header and
+foreign tooltips do no modifier reads. They retain metadata changes with unchanged
+captions and amounts, foreign tooltip ownership and hidden work in both Performance Mode
 states. Diagnostics do not establish the identities in a screenshot until the
 actual tooltip is observed. Coverage remains CI-only.
 
@@ -237,7 +241,7 @@ profiles and resets. These cases remain CI-only and were not executed locally;
 they do not prove native actor metadata or live rendering.
 
 Talent proc cases join only each positive member's single actual native talent
-origin. They retain ordinary casts, proc colors, source IDs/counters/checkpoints
+origin. They retain ordinary casts, native proc flags, source IDs/counters/checkpoints
 and separate origin identities; definition-only, absent, conflicting, malformed
 or multiple origins keep the received source presentation. Full-controller
 cases show Pyroblast beside Hot Streak, FX Holy nova as Chastise and a generic
@@ -381,6 +385,50 @@ ambiguous declaration fails preparation.
 
 The assertions cover:
 
+- Meter-color cases exercise Default/Custom normalization, six-digit RGB values,
+  missing/invalid/older-profile defaults, preview/Confirm/discard/reset and
+  retained custom choices. The production editor uses explicit fake native
+  picker methods to cover synchronous initialization, independent ability/proc
+  previews, picker Cancel, Default retirement, foreign callback takeover,
+  missing-picker hex fallback and settings search. Native and legacy meter
+  cases cover both Performance Mode states, unchanged numeric values and
+  fractions, changed-only RGB writes, hidden deferral, pooled reuse and retained
+  Party class colors. These CI-only cases do not establish native picker
+  availability, live appearance or measured performance; no local execution is
+  authorized.
+- Automatic Default-color cases use received native source kinds and contribution
+  school/periodicity/credit fields through the existing exact same-snapshot member
+  joins. They distinguish same-school/equal-caption melee, periodic damage,
+  direct talents (even without a proc flag), validated talent/item origins and
+  other procs, with periodic priority. Ordinary abilities retain all seven
+  schools and explicit hybrid colors. Missing/unknown/malformed periodicity or
+  credit, mixed members/families and non-damage credit cannot claim an all-periodic
+  category; zero-display history does not vote after Reset. Category-only changes
+  retain counters, rates, fractions and rate identities where source identity
+  stays unchanged. Both Performance Mode states cover changed-only RGB writes,
+  hidden deferral, pooled/world cleanup, Custom precedence and return to Default.
+  Legacy and Party retain their existing fallbacks. These cases are CI-only and
+  do not verify current provider payloads or appearance.
+- Exact skill/talent suffix cases cover all three current catalog pairs and a
+  future canonical pair, without a per-ability allowlist. They reject missing or
+  extra suffixes, partial names, changed case, unknown/nested class prefixes and
+  conflicting classes at equal or different ranks. Optional matching components
+  and metadata-driven retirement are covered. Different actual casters never form
+  a mixed pair even when they share a native summon definition; ordinary summon
+  skill grouping keeps its existing cases. Cases combine known ability/non-proc and
+  talent/proc records only with matching owner, actual caster and components.
+  They use different received captions to establish key-based grouping and
+  equal captions for negative identity cases. Native amounts, recent/average
+  rates, mixed presentation, highest positive ability-rank artwork/caption,
+  counter/order identity reuse and both original Native IDs remain covered.
+  Owner/caster, role, kind, unknown attribution, missing/invalid ranks,
+  variant/item components, source-only/healing scope and same-rank ambiguity
+  keep their boundaries; Boss Damage shares the exact-pair rule. Reset ignores
+  zero-display high ranks. Full view cases in both Performance Mode states
+  include Holy Nova/Radiance and Holy Fire/Purifying Flame with different labels; they
+  cover one displayed bar, Custom's mixed ability color, changed-only writes,
+  hidden deferral, pooled reuse and world cleanup. These cases are CI-only;
+  no local tests or native appearance verification was performed.
 - Editor navigation loads `core/editor.lua` against explicit native scroll and
   glyph-width boundaries. It covers grouped visibility, original section owners,
   retained section state, per-category offsets, duplicate-heading suppression,
@@ -498,6 +546,12 @@ The assertions cover:
   failed handoffs retire the duplicate custom caption. These authored CI-only
   contracts do not verify native provider availability or live clock rendering.
 
+  Clock-fit cases supply explicit natural glyph metrics and owning-frame scale.
+  They cover leftward growth past the old fixed slot, remaining zone width,
+  font/scale invalidation, unchanged measurement/write reuse, hidden/off deferral,
+  Show recovery and failed-metric native ownership retries in both Performance
+  Mode states. No local tests or native rendering verification were performed.
+
 - Fallen-ally waypoint mocks load the production controller with explicit
   native roster boundaries and check dead/alive/ghost/disconnect retirement,
   slot changes during reads, literal native names, nearest/stable selection,
@@ -538,7 +592,17 @@ The assertions cover:
   text-free, borderless talent/jewelry timer icons filling their existing buttons
   with positive and zero remaining time, stable received
   order at either anchor without ready/waiting movement, retained timer tooltips
-  and unchanged regular native aura handling. These authored cases remain
+  and unchanged regular native aura handling. Separate Debuffs cases retain
+  native button IDs/handlers, independent roots and slots, below-Buffs defaults,
+  six-column wrapping, both flip directions, anchor repair, independently hidden
+  groups, pending hidden reflow and pool reuse in both Performance Mode states.
+  Callback cases retire any captured native loop entry through fixture-only
+  upvalue access, modeling Lua 5.0's final nil iterator result under the CI
+  Lua 5.1 interpreter. They require one stable Show/Hide callback per group
+  and exercise native visibility reflow after binding. This is a targeted model,
+  not execution under the native Lua 5.0 client.
+  Shared Layout continues to own position/scale/visibility transactions, profiles
+  and resets. These authored cases remain
   CI-only and were not run locally; native appearance remains unverified.
 - Extracted production unit-border transitions actually hide inactive party and
   portrait variants, restore the retained artwork on option changes and skip
@@ -607,6 +671,14 @@ The assertions cover:
   update both normal labels. Matching-cache cases check each original hit's
   position and loss consumption instead of a shared presentation centroid.
   These are CI-only source/lifecycle assertions.
+  Area-filter cases load the generated native spell data and production SCT
+  over fake boundaries. They cover default-on normalization, saved off,
+  profile/discard/reset behavior, all styles and both modes, native Consecration
+  and totem pulse IDs, independent critical/periodic choices, current queued
+  choices, mixed grouping, active removal, unchanged pool allocation, exact
+  localized aliases, conflicts, unknown native IDs and world cleanup. Editor
+  cases cover search, the compact category grid without a description and the final row. These cases do not
+  establish live provider payloads or native cast-consumer parity.
   Default per-hit matching/fallback remains covered. Extraction keeps complete
   multi-variable constant declarations once, with uniqueness regression cases.
 
