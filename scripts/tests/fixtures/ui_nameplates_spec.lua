@@ -543,13 +543,15 @@ do
         end
     end)
     local function Label(value)
-        local found, count = nil, 0
+        local found, count, positions = nil, 0, {}
         for _, label in ipairs(cached:Labels()) do
             if label:GetText() == tostring(value) then
                 found, count = label, count + 1
+                table.insert(positions, label.parent.parent.anchor.x)
             end
         end
-        return found, count
+        table.sort(positions)
+        return found, count, positions
     end
     local first, second = cached:MakePlate("Cache", 1000), cached:MakePlate("Cache", 1000)
     first.centerX, second.centerX = 100, 300
@@ -604,7 +606,11 @@ do
     cached.targetName = "Cache"
     cached:Hit(205)
     cached:Tick(0.17)
-    assert(Label(205).parent.parent.anchor.x == 500, "distinct native names shared a cached fallback")
+    local _, namedCount, namedPositions = Label(205)
+    assert(
+        namedCount == 2 and namedPositions[1] == 200 and namedPositions[2] == 800,
+        "distinct native names shared a cached fallback or a grouped label"
+    )
 
     cached:Hit(206)
     cached.now = cached.now + 0.09
@@ -631,9 +637,10 @@ do
         firstOrigin.lossRemaining == 0 and secondOrigin.lossRemaining == 0,
         "an original hit skipped loss consumption"
     )
+    local _, lossCount, lossPositions = Label(100)
     assert(
-        Label(100).parent.parent.anchor.x == (100 + 300 + 300) / 3,
-        "loss invalidation changed the original centroid"
+        lossCount == 3 and lossPositions[1] == 100 and lossPositions[2] == 300 and lossPositions[3] == 300,
+        "loss invalidation grouped original hits or changed their individual origins"
     )
 
     before = widths
@@ -694,8 +701,12 @@ for _, style in ipairs({ "diablo", "enemy" }) do
             current:Hit(17)
             current:Hit(performance and 19 or 17)
             current:Tick(performance and 0.301 or 0.17)
-            assert(#current:Labels() == 1, "same-origin originals stopped sharing a displayed group")
+            assert(
+                #current:Labels() == (performance and 1 or 2),
+                "following grouped normal hits or split a Performance Mode sum"
+            )
         end
+        local pooled = moving:Labels()
         local label, referenceLabel = assert(moving:Labels()[1]), assert(stationary:Labels()[1])
         local holder, referenceHolder = label.parent.parent, referenceLabel.parent.parent
         local allocated = #moving.objects
@@ -762,8 +773,10 @@ for _, style in ipairs({ "diablo", "enemy" }) do
         moving.targetName = "Moving"
         moving:Hit(23)
         moving:Tick(0.301)
+        label = assert(moving:Labels()[1])
+        holder = label.parent.parent
         assert(
-            moving:Labels()[1] == label and holder.anchor.x == 700,
+            (label == pooled[1] or label == pooled[2]) and #moving.objects == allocated and holder.anchor.x == 700,
             "a new number did not reuse the pool at its own current origin"
         )
         plate.centerX, plate.top = 450, 250
@@ -795,7 +808,10 @@ for _, style in ipairs({ "diablo", "enemy" }) do
         current:Tick(0.04)
         current:Hit(performance and 19 or 17)
         current:Tick(0.05)
-        assert(#current:Labels() == 0, "a group displayed before every original finished settling")
+        assert(
+            #current:Labels() == (performance and 0 or 1),
+            "normal hits waited for each other or a sum bypassed settling"
+        )
         plate.centerX, plate.top = 700, 500
         current:Tick(0.041)
         if performance then
@@ -803,7 +819,8 @@ for _, style in ipairs({ "diablo", "enemy" }) do
             plate.centerX, plate.top = 900, 650
             current:Tick(0.17)
         end
-        local label = assert(current:Labels()[1])
+        assert(#current:Labels() == (performance and 1 or 2), "settled normal hits were grouped or a sum was split")
+        local label = assert(current:Labels()[performance and 1 or 2])
         local holder = label.parent.parent
         assert(
             holder.anchor.x == plate.centerX and holder.anchor.y == plate.top + 12,
@@ -839,16 +856,35 @@ for _, style in ipairs({ "diablo", "enemy" }) do
                     current:Hit(performance and (index * 2 + 15) or 17)
                 end
                 current:Tick(performance and 0.301 or 0.17)
-                assert(#current:Labels() == 1, "mixed-origin originals lost their grouped presentation")
+                assert(
+                    #current:Labels() == (performance and 1 or 3),
+                    "mixed origins grouped normal hits or split a sum"
+                )
             end
-            local label, referenceLabel = moving:Labels()[1], stationary:Labels()[1]
-            local holder, referenceHolder = label.parent.parent, referenceLabel.parent.parent
+            local label = moving:Labels()[1]
+            local holder = label.parent.parent
             local secondX, secondY = targets[2] == "Second" and 500 or 800, targets[2] == "Second" and 600 or 522
             if targets[1] == "Missing" then
                 secondX, secondY = 800, 522
             end
-            Near(holder.anchor.x, (100 + secondX + 100) / 3, "mixed group changed its original hit centroid")
-            Near(holder.anchor.y, (200 + secondY + 200) / 3 + 12, "mixed group changed its vertical hit centroid")
+            if performance then
+                Near(holder.anchor.x, (100 + secondX + 100) / 3, "mixed group changed its original hit centroid")
+                Near(holder.anchor.y, (200 + secondY + 200) / 3 + 12, "mixed group changed its vertical hit centroid")
+            else
+                for index, currentLabel in ipairs(moving:Labels()) do
+                    local target, currentHolder = targets[index], currentLabel.parent.parent
+                    Near(
+                        currentHolder.anchor.x,
+                        target == "First" and 100 or target == "Second" and 500 or 800,
+                        "normal hit lost its own horizontal origin"
+                    )
+                    Near(
+                        currentHolder.anchor.y,
+                        (target == "First" and 200 or target == "Second" and 600 or 522) + 12,
+                        "normal hit lost its own vertical origin"
+                    )
+                end
+            end
             -- A later plate with a previously unmatched name must not claim an
             -- active fallback label, nor may a later member restore following.
             local late = moving:MakePlate("Missing", 1000)
@@ -858,12 +894,21 @@ for _, style in ipairs({ "diablo", "enemy" }) do
             for _ = 1, 12 do
                 moving:Tick(1 / 60)
                 stationary:Tick(1 / 60)
-                Near(
-                    holder.anchor.x,
-                    referenceHolder.anchor.x,
-                    "mixed or nil origins acquired a live horizontal follow"
-                )
-                Near(holder.anchor.y, referenceHolder.anchor.y, "mixed or nil origins acquired a live vertical follow")
+                local references = stationary:Labels()
+                for index, currentLabel in ipairs(moving:Labels()) do
+                    local currentHolder, reference = currentLabel.parent.parent, references[index].parent.parent
+                    local target = not performance and targets[index]
+                    Near(
+                        currentHolder.anchor.x - reference.anchor.x,
+                        target == "First" and 800 or target == "Second" and -450 or 0,
+                        "normal hit followed another enemy or a mixed sum acquired horizontal follow"
+                    )
+                    Near(
+                        currentHolder.anchor.y - reference.anchor.y,
+                        target == "First" and 600 or target == "Second" and -500 or 0,
+                        "normal hit followed another enemy or a mixed sum acquired vertical follow"
+                    )
+                end
                 assert(label:GetText() == (performance and "57" or "17"), "mixed follow changed displayed totals")
             end
             moving:Event(moving.controller, "PLAYER_LEAVING_WORLD")
@@ -871,7 +916,7 @@ for _, style in ipairs({ "diablo", "enemy" }) do
         end
     end
 end
-print("PASS mixed and nil-origin groups keep their original centroid without rematching in either style or mode")
+print("PASS normal hits follow their own origins while mixed Performance Mode sums keep their centroid")
 
 -- CI-only native camera boundary: freelook releases the old plate capture
 -- synchronously, then routes the later physical release to WorldFrame.

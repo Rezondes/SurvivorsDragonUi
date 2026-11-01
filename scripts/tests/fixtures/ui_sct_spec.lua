@@ -609,13 +609,17 @@ Test("abbreviation previews refit active totals without restarting motion, font 
         context:Hit(1500000)
         context:Hit(1500000)
         context:Tick(0.4)
-        local label = assert(context:Labels()[1])
+        local labels = context:Labels()
+        local label = assert(labels[1])
         local full, compact = performance and "3,000,000" or "1,500,000", performance and "3M" or "1.5M"
-        assert(#context:Labels() == 1 and label:GetText() == full, "original group semantics changed")
+        assert(#labels == (performance and 1 or 2) and label:GetText() == full, "per-mode hit presentation changed")
         local holder, allocated, width = label.parent.parent, #context.objects, label:GetWidth()
         local anchor, alpha, font = holder.anchor, holder:GetAlpha(), label:GetFont()
         context:SetSetting("sctShortNumbers", true)
         assert(context:Labels()[1] == label and label:GetText() == compact, "active group did not abbreviate")
+        for _, active in ipairs(labels) do
+            assert(active:GetText() == compact, "abbreviation skipped a separate normal hit")
+        end
         assert(label:GetWidth() < width, "abbreviation retained the old glyph width")
         assert(
             holder.anchor == anchor and holder:GetAlpha() == alpha and label:GetFont() == font,
@@ -630,12 +634,22 @@ Test("abbreviation previews refit active totals without restarting motion, font 
         context:NoPresentationWrites()
         context:SetSetting("sctShortNumbers", false)
         assert(label:GetText() == full and holder.anchor == anchor, "Cancel did not restore the original total")
+        for _, active in ipairs(labels) do
+            assert(active:GetText() == full, "Cancel skipped a separate normal hit")
+        end
         context:Tick(1.11)
         assert(#context:Labels() == 0, "formatting restarted expiry")
         context:SetSetting("sctShortNumbers", true)
         context:Hit(2500000000)
         context:Tick(0.4)
-        assert(context:Labels()[1] == label and label:GetText() == "2.5B", "pooled text replayed an old total")
+        local reused = assert(context:Labels()[1])
+        assert(
+            #context:Labels() == 1
+                and (reused == labels[1] or reused == labels[2])
+                and reused:GetText() == "2.5B"
+                and #context.objects == allocated,
+            "pooled text allocated a replacement or replayed an old total"
+        )
     end
 end)
 
@@ -935,7 +949,7 @@ Test("scrolling keeps native V ownership and default text keeps its native coord
     assert(label.parent.parent.anchor.point == "BOTTOMLEFT", "default text changed coordinate systems")
 end)
 
-Test("fixed scrolling separates a burst and animates without enemy projection", function()
+Test("normal fixed scrolling retains every burst hit and animates without enemy projection", function()
     local context = SCT(true)
     context:Hit(111)
     context:Hit(111)
@@ -943,7 +957,7 @@ Test("fixed scrolling separates a burst and animates without enemy projection", 
     context:Hit(333)
     context:Tick(0.1)
     local labels = context:Labels()
-    assert(#labels == 3, "distinct hits were dropped or merged")
+    assert(#labels == 4, "normal scrolling dropped or merged an original hit")
     local rows = {}
     local values = {}
     for _, label in ipairs(labels) do
@@ -955,9 +969,12 @@ Test("fixed scrolling separates a burst and animates without enemy projection", 
         assert(context.scrollRoot.anchor.x == 160, "the default stream moved from the right of screen center")
         assert(not rows[anchor.y], "simultaneous scrolling labels share a row")
         rows[anchor.y] = true
-        values[label:GetText()] = true
+        values[label:GetText()] = (values[label:GetText()] or 0) + 1
     end
-    assert(values["111"] and values["222"] and values["333"], "grouping changed an original damage amount")
+    assert(
+        values["111"] == 2 and values["222"] == 1 and values["333"] == 1,
+        "normal scrolling changed or suppressed an original damage amount"
+    )
     local holder = labels[1].parent.parent
     local x, y = holder.anchor.x, holder.anchor.y
     context:Tick(0.2)
@@ -1089,7 +1106,7 @@ Test("Performance Mode changes grouping without retiring or restarting active SC
     end
 end)
 
-Test("Performance Mode renders summed damage while restored normal mode keeps exact-amount duplicates", function()
+Test("Performance Mode renders summed damage while restored normal mode shows every original hit", function()
     for _, scrolling in ipairs({ false, true }) do
         local context = SCT(scrolling, function(setup) setup.settings.performanceMode = true end)
         context:Hit(20)
@@ -1115,13 +1132,37 @@ Test("Performance Mode renders summed damage while restored normal mode keeps ex
             values[label:GetText()] = label
         end
         assert(
-            #context:Labels() == 3 and values["120"] == summed and values["20"] and values["100"] and not values["200"],
-            "normal mode summed distinct amounts or stopped exact-amount duplicate suppression"
+            #context:Labels() == 4 and values["120"] == summed and values["20"] and values["100"] and not values["200"],
+            "normal mode summed or suppressed an original hit"
         )
         context:Tick(1.26)
-        assert(#context:Labels() == 2 and not summed:IsVisible(), "sum lifetime was restarted by the mode transition")
+        assert(#context:Labels() == 3 and not summed:IsVisible(), "sum lifetime was restarted by the mode transition")
         context:Tick(0.3)
         assert(#context:Labels() == 0, "normal groups lost their full original display lifetime")
+    end
+end)
+
+Test("normal bursts show every identical hit in all styles and reuse their retired pool", function()
+    for _, style in ipairs({ "enemy", "msbt", "diablo" }) do
+        local context = SCT(style == "msbt", function(setup) setup.settings.sctStyle = style end)
+        for _ = 1, 24 do
+            context:Hit(100)
+        end
+        context:Tick(0.2)
+        assert(#context:Labels() == 24, "normal burst collapsed identical simultaneous hits")
+        for _, label in ipairs(context:Labels()) do
+            assert(label:GetText() == "100", "normal burst changed an original damage amount")
+        end
+        local allocated = #context.objects
+        context:Tick(2)
+        assert(#context:Labels() == 0, "normal burst retained expired labels")
+        for _ = 1, 24 do
+            context:Hit(100)
+        end
+        context:Tick(0.2)
+        assert(#context:Labels() == 24 and #context.objects == allocated, "normal burst did not reuse its text pool")
+        context:Event(context.controller, "PLAYER_LEAVING_WORLD")
+        assert(#context:Labels() == 0, "world cleanup retained normal burst labels")
     end
 end)
 
