@@ -10,7 +10,20 @@ learned talents, pet/totem attacks and periodic effects in every native language
 Unrelated native sources retain their separate rows even when their names match.
 Recognized ability ranks use a stable display-group identity for rate samples.
 
-Damage Done requests the selected native recent window, or All. Healing Done
+The shared meter controller reads native and legacy data once per second during
+regular updates. Totals, shares, bars, attribution and displayed rates use that
+same cadence. Input, settings, scrolling, Reset and showing the meter prime the
+existing reader for the next frame, keeping user feedback immediate without
+another idle updater.
+
+Damage Done requests the selected native recent window on the regular
+one-second pass. Extra triggered reads within that second may use complete
+native snapshots with `windowSeconds = 0` while the viewport's native rates
+remain current. These counter reads do not replace recent DPS with the All average. Newly
+revealed or replaced row identities, Reset and native context retirement obtain
+a fresh recent capture immediately through the existing reader. Only visible
+rows retain sampled native rates; unavailable history stays unavailable.
+Selecting All uses native averages without requesting recent history. Healing Done
 keeps native received-healing semantics; Boss Damage requests the current/last
 encounter; Party Damage requests owner totals and retained hero portraits.
 The v1 source buffers are bounded to these four views. The meter does not call its
@@ -19,7 +32,7 @@ tab, keep a local rolling ring or subtract local reset baselines on this path.
 Current-loadout reads are unnecessary for these rows because each snapshot
 includes complete historical source metadata.
 
-X captures a native checkpoint synchronously. A failed capture preserves the
+The reset button captures a native checkpoint synchronously. A failed capture preserves the
 previous session and its visible values. Successful replacement releases the
 old handle; failed release retries through the existing controller without
 collecting data while disabled. Invalidated checkpoints block pre-reset replay
@@ -32,6 +45,9 @@ the existing circular renderer, native circle when available and the same
 pooled strip fallback otherwise. Failed bindings observe native retry delays;
 permanent failures wait for a changed identity or normal pool retirement.
 Both Performance Mode states retain the same instant native information.
+
+The reduced history-query cadence still reads complete official snapshots;
+it does not omit the native ledger or establish a measured FPS improvement.
 
 The existing getter/metadata/rate path below remains for clients without the
 v1 capability endpoint. Once that endpoint is present, typed errors or missing
@@ -57,8 +73,12 @@ Click its heading to cycle through Damage Done, Healing Done, Boss Damage and Pa
 views still waiting for their first usable native publication are skipped.
 Right-click goes backwards. The gold header shows **Total** and **DPS** (or **HPS**
 for healing), replacing the view name and the former footer text. Hover over the
-header to see the current view. The small gold **X** resets statistics in every
+header to see the current view. The small gold **refresh button** resets statistics in every
 view; it never closes the meter. When totals are shown, missing values display `--`.
+The whole meter hides while level-up or jewelry upgrade cards are open and
+returns afterward. This temporary hide preserves statistics, reset checkpoints
+and recent DPS samples. It follows the existing one-second reader and respects
+the Layout Hide frame choice.
 Under `/sdui` → **Damage meter**, set **Abilities shown** from **1 to 10**;
 the default is **6**. The number previews immediately and saves with Confirm.
 Cancel, world/logout/reload discard, profiles and both resets use the shared
@@ -83,7 +103,7 @@ party getter skip that view.
 Under **DPS window**, use the minus/plus buttons for **5–120 seconds**, in
 five-second steps. Below five, **All** selects the whole-run average. Hover over
 the header or a source to see its whole-run average alongside recent DPS.
-The **X** starts a new session for all four views. It clears totals, source rows, shares,
+The **reset button** starts a new session for all four views. It clears totals, source rows, shares,
 rankings, scroll position and displayed/recent rates together. Existing effects
 or pets remain in game; their later damage or healing counts as new activity.
 The reset is session-only and independent of Confirm. Legacy baselines are
@@ -123,7 +143,11 @@ to missing/invalid values and resets, preserving explicit saved width choices.
 Each pooled row retains only its latest successful numeric text metric, keyed
 by the rendered caption, actual font face/size/flags, owning-row effective scale
 and relevant width. Raw counter changes that keep the same compact caption do
-not remeasure. Missing/invalid metrics retry through the existing visible reader
+not remeasure or repeat the settled layout helpers. Each visible numeric label
+still checks its actual font so an unannounced native font change can invalidate
+the layout; rows share one root-scale sample. Width, scale, icon options, font
+choices and changed captions also invalidate the relevant layout. Missing or
+invalid metrics retry through the existing visible reader
 with conservative space until ready. Row retirement clears the metric; hidden,
 off and numbers-off views skip measurement. Both Performance Mode states use
 the same instant reflow, without a new region, asset, event or updater. CI-only
@@ -142,7 +166,7 @@ grouping.
 On v1, grouping requires an ability descriptor with a valid native `abilityKey`
 and skill rank. Owner, proc, variant, item-instance, talent and item identities
 stay distinct. A family with conflicting same-rank sources stays separate, as
-do sources without the required identity and generic, effect or item sources.
+do sources without the required identity and generic or unbound effect sources.
 Names alone never establish a v1 family. The highest contributing skill rank
 provides the native caption and artwork, including pending or missing artwork;
 the private display identity survives later upgrades and language changes.
@@ -156,7 +180,89 @@ existing cadence. Both Performance Mode states use the same instant result.
 CI-only cases cover nine ranks, later upgrades, resets, rates, metadata changes
 and distinct sources; no local tests or game execution were run.
 
+## Item ranks
+
+The v1 meter also combines recognized ranks of one item, including item-bound
+abilities and effects. An explicit native `itemKey` establishes the family;
+rank-specific item IDs may differ. Separate copies, caster/owner, proc, variant,
+talent and effect-component identities remain separate. The highest contributing
+item rank supplies the native row caption and artwork. Amounts, rates, shares,
+Reset checkpoints and both Performance Mode states use the existing rank-summary
+path without changing native counters.
+
+Direct item rows require their own item key and rank. Item-bound abilities and
+effects also require a stable native ability or effect-component key. They can
+use their own explicit item/rank metadata, or each positive member's single
+recorded item origin joined from the same snapshot. Actual item origins supply
+the item rank independently of an ability's skill rank. Definition-level links,
+names, current equipment and item IDs alone never establish a family. Missing,
+conflicting or multiple origins and ambiguous same-rank sources stay separate;
+zero-display members do not supply post-Reset attribution.
+
+CI-only fixtures cover these explicit contracts. No live Eye of Hakkar snapshot
+was available, so grouping its published ranks still depends on the game
+supplying that identity. No local tests or game execution were performed.
+
+## Pet damage
+
+On clients with the native v1 meter API, Damage Done and Boss Damage show the
+received caster name beside each pet, summon or totem spell, such as
+`Shadowbolt (Imp)`. Player spells keep their own rows. The meter uses recorded
+actor identities, including contributors that have despawned, rather than
+matching names or observing the current pet.
+
+Under `/sdui` → **Damage meter**, enable **Combine pet damage** to show each
+pet's spells together under its native name and portrait. This choice defaults
+off and shares preview, Confirm, Cancel, profiles and full resets. Where the
+native actor supplies a summon or totem key, the same kind belonging to the same
+accounting owner shares a row across incarnations. Without that key, individual
+actor identities stay separate. Names and broad pet-family labels never merge
+actors. The same identity rule keeps the default spell rows compact without
+combining player and pet casts.
+
+Pet summaries add their disjoint native amounts and rates, retaining the
+selected native window and checkpoint. A missing member rate keeps the combined
+rate unavailable. All-proc summaries retain the proc color; mixed summaries use
+the normal class color. They do not change native counters,
+header totals or Reset. Healing Done, Party Damage and the legacy meter path
+keep their existing grouping. Both Performance Mode states show the same
+instant result; hidden/off work remains deferred. CI-only mocks cover native
+caster labels, summaries, later incarnations, preview/discard, profiles, resets
+and unchanged reuse. No local tests or game execution were performed.
+
+## Talent proc captions
+
+On the native v1 path, a proc can show its triggering talent's received name
+and icon. For example, an ordinary cast remains `Pyroblast`, while a separately
+recorded proc with an explicit Hot Streak origin shows `Hot Streak`. The same
+rule applies to Chastise or any other native talent caption; the addon has no
+spell-to-talent name table and does not infer a talent from the player's class,
+current build, spell name or bar color.
+
+Every positive displayed contribution in the row must identify the same single
+actual talent origin in that snapshot. Definition-level associations do not
+establish that attribution. Missing, mixed, multiple or invalid origins keep
+the received source caption and artwork. Zero-display history does not supply
+post-Reset attribution. Native proc colors remain unchanged, so two related
+spell/proc rows can still have different colors.
+
+This changes presentation only. Native source records and IDs, counters, rates
+and checkpoint fences remain intact. Display families retain distinct accepted
+talent origins. Pending or missing talent
+art uses the shared neutral icon; native metadata revisions refresh names and
+artwork through the existing pooled presentation. Both Performance Mode states
+use the same instant result and hidden/off work stays deferred. CI-only mocks
+cover these boundaries; no local tests or game execution were performed, and
+actual Rockbiter, Hot Streak and Chastise payloads remain unverified.
+
 ## Native data
+
+The meter reuses prepared source names and groups as counters change, and only
+copies and samples the rows currently visible. Scrolling retains the complete
+rankings and initializes each newly revealed row's rate. Regular totals and
+displayed DPS/HPS update once per second. Both Performance Mode
+states share this behavior. The native API still supplies the complete ledger;
+these source changes do not establish a measured late-run FPS improvement.
 
 `meterEnabled` is a normalized boolean in the existing display table. Missing
 or invalid values use false, including older configurations without the key.
@@ -193,7 +299,7 @@ for clearing these counters.
 
 `NewMeterSession` therefore captures exact name/proc counter baselines for all
 four views through their existing getters, once in the deferred visible refresh
-after the X is clicked. Subsequent rows contain only positive counter deltas.
+after the reset button is clicked. Subsequent rows contain only positive counter deltas.
 Their sum becomes the displayed total; shares and descending rankings use those
 deltas, with native order as the tie-breaker. Proc identity, source names and
 native tables are never changed. Post-reset averages, including healing and boss
@@ -220,11 +326,11 @@ segments enter the calculation.
 
 `core/meter_rates.lua` keeps bounded, session-only cumulative samples for the
 header and exact source-name/proc identities. Observation uses the existing
-five-Hz controller, continuing Damage Done sampling while another meter view is
+one-Hz controller, continuing Damage Done sampling while another meter view is
 visible. A gap over two run seconds discards the recent window; showing after
-hiding starts a new observation window. Clock/total/source-counter regression or
+ordinary Layout/UI hiding starts a new observation window. Clock/total/source-counter regression or
 a disappearing source retires recent history. New runs, world cleanup, language
-changes, full resets, disabling and the X clear it too. All skips recent history
+changes, full resets, disabling and the reset button clear it too. All skips recent history
 and uses the native run average before a reset, or the session average afterwards.
 No recent samples or reset baselines are collected while hidden/off.
 
@@ -234,8 +340,8 @@ Missing or invalid values and both full resets use ten. Named profiles copy the
 same normalized setting, with no new SavedVariable. Reset baselines/history are
 never saved or included in profiles.
 
-Header and row DPS/HPS plus average tooltips are presented at one Hz; totals,
-shares, bars and input retain five-Hz updates. New sources obtain their current
+Header and row DPS/HPS, average tooltips, totals, shares and bars use one-Hz
+regular updates. Input primes the reader for the next frame. New sources obtain their current
 rate immediately when a sufficient window exists. Rate samples follow exact
 name/proc identity, independently of row pooling, scrolling or native sorting.
 View changes and invalid data clear presentation samples; rate-history retirement
@@ -249,7 +355,12 @@ Their runtime code is not imported; native data ownership and the addon lifecycl
 remain local to this implementation.
 
 The phase is read before any retained meter data. `ready` clears the view;
-`playing`, `choosing`, `paused`, `dead` and `victory` can display valid data.
+`playing`, `choosing`, `paused`, `dead` and `victory` remain valid data phases.
+During `choosing`, the root is actually hidden before snapshot/row work; the
+existing native HUD suppression stays acquired. Its OnHide handler retains
+recent samples only for this temporary choice hide, and OnShow rejects an
+attempt to reveal it until a fresh phase read leaves `choosing`. Session and
+native checkpoint ownership are unchanged. Other valid phases display normally.
 Each native snapshot must have finite nonnegative totals, rates, row amounts
 and shares, with shares at most one. Source names remain native; before Reset,
 source order remains native too.
@@ -259,8 +370,9 @@ Initially a nonempty valid getter result can recover a view whose packet arrived
 before addon initialization. Empty lists require their `AZSMETER`, `AZSHEAL` or
 `AZSBOSSDMG` publication. A new zone, world leave or ready phase retires the
 previous data and requires new publications before accepting that view again.
-Packet handlers record receipt only: getters are read after parsing in OnUpdate,
-at most five times a second. Paused data has no artificial expiry. Missing native
+Packet handlers record receipt only: getters are read after parsing by the
+shared one-second controller, with input-triggered refreshes on the next frame.
+Paused data has no artificial expiry. Missing native
 replay after reload can leave an empty view waiting; no resync API is invented.
 
 Damage, healing and boss sources belong to the local player's native meter.
@@ -280,8 +392,8 @@ rows and the summed party total/rate. Only the published name, class, damage,
 rate and share are consumed; no spell breakdown or attribution is invented.
 The existing controller handles `AZSPARTY` receipts and defers its getter until
 after native parsing, with the same phase, empty-publication and world/zone
-retirement gates. Readiness, native HUD ownership, one-Hz displayed rates and
-the five-Hz visible reader are shared. X baselines this fourth view along with
+retirement gates. Readiness, native HUD ownership, displayed rates and the
+one-Hz regular reader are shared. The reset button baselines this fourth view along with
 the other three; its post-reset rates use native seconds since Reset. Class
 metadata survives session deltas, including metadata-only changes.
 
@@ -322,7 +434,7 @@ The native **Melee** source uses the equipped main-hand icon from
 Unavailable, empty, invalid or question-mark results use the native default
 `Interface\\Icons\\INV_Sword_04` sword. Only the exact English label or the
 active language's official `Melee` caption matches. Equipment changes are read
-through the meter's existing five-Hz refresh, with no new event or updater.
+through the meter's existing one-Hz refresh, with no new event or updater.
 
 SCT and the meter share one source-icon resolver and live item cache. The
 native general-jewelry catalog now covers item-triggered damage/healing such as
@@ -481,8 +593,18 @@ updater or repeated geometry work is added.
 
 The pooled rows show a scrollable source list. Header mode and scroll
 offset are session-only; resets select Damage Done and the first page. One controller
-coalesces data reads at five Hz. Bar values, colors, successful icon bindings and
-label text skip unchanged writes. If the shared SCT resolver is unavailable,
+coalesces regular data reads at one Hz; user actions prime that same reader for
+the next frame. Rows skip full layout, metric, static-icon, fraction and color work
+when their corresponding inputs are unchanged. Final displayed captions drive
+text layout; bar fractions still react to both the row amount and leading amount.
+Names, including recorded caster captions, update independently.
+Successful static native icons skip rebinding at the same path and scale, while
+failed artwork and font assignments remain retryable. Native portrait-image
+checks, legacy icon-resolver checks and Party class-color validation continue
+through the regular reader. Pool retirement clears the settled presentation
+state, and hovered tooltips retain their existing ownership checks. Bar values,
+colors, successful icon bindings and label text also skip unchanged writes.
+If the shared SCT resolver is unavailable,
 the meter uses the same neutral unknown icon without changing native totals.
 Shared layout storage contains only confirmed geometry and visibility; no meter
 data or new SavedVariable is saved. All captions have source/runtime entries in

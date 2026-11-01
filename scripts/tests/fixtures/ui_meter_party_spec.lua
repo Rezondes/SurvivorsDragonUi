@@ -136,7 +136,10 @@ local function Meter(configure)
         return true
     end
     env.SetPortraitToTexture = function(name, texture) env[name]:SetTexture(texture) end
-    env.AZS_GetPhase = function() return context.phase end
+    env.AZS_GetPhase = function()
+        Count("reads", "phase")
+        return context.phase
+    end
     env.AZS_RUN, env.AZS_RUN_UPDATED = { t = 10 }, context.now
     context.damage = { { name = "Sinister Strike", dmg = 100, dps = 10, share = 1, proc = 0 } }
     context.healing, context.boss = context.damage, context.damage
@@ -198,9 +201,10 @@ local function Meter(configure)
         if object.kind == "FontString" and object.parent == context.header then context.title = object end
         if object.kind == "FontString" and object.parent == context.root then context.status = object end
     end
-    function context:Tick()
-        self.now = self.now + 0.21
-        self:Call(self.controller, "OnUpdate", 0.21)
+    function context:Tick(elapsed)
+        local step = elapsed or 1.01
+        self.now = self.now + step
+        self:Call(self.controller, "OnUpdate", step)
     end
     function context:Cycle(direction)
         self:Call(self.header, "OnClick", direction or "LeftButton")
@@ -242,6 +246,58 @@ local function NoMeterReads(context)
         "navigation read meter getters before its visible deferred reader"
     )
 end
+
+Test("legacy meter coalesces packets for one second and explicit actions arm the next frame", function()
+    for _, performance in ipairs({ false, true }) do
+        local context = Meter(function(c) c.settings.performanceMode = performance end)
+        context:Tick(0.01)
+        assert(
+            context.reads.phase == 1 and context.reads.damage == 1,
+            "initial readiness waited a full regular interval"
+        )
+        assert(context:Row(1).entry.dmg == 100)
+        context:ResetCounts()
+        for receipt = 1, 4 do
+            context.damage[1].dmg = 100 + receipt * 10
+            context:Publish("AZSMETER")
+            context:Tick(0.2)
+            NoMeterReads(context)
+            assert(
+                not context.reads.phase and context:Row(1).entry.dmg == 100,
+                "packet receipt bypassed the regular read interval"
+            )
+        end
+        context:Tick(0.19)
+        NoMeterReads(context)
+        assert(not context.reads.phase, "phase polling ran before the one-second boundary")
+        context:Tick(0.02)
+        assert(
+            context.reads.phase == 1 and context.reads.damage == 1,
+            "queued packets did not share one bounded reader pass"
+        )
+        assert(context:Row(1).entry.dmg == 140, "the regular read did not publish the latest coalesced counters")
+        context:ResetCounts()
+        context:Call(context.header, "OnClick", "LeftButton")
+        NoMeterReads(context)
+        context:Tick(0.01)
+        assert(
+            context.reads.phase == 1 and context.reads.healing == 1 and context.title:GetText() == "Healing Done",
+            "navigation lost next-frame readiness"
+        )
+        context:ResetCounts()
+        context.env.DFRL.ResetMeterStats()
+        NoMeterReads(context)
+        context:Tick(0.01)
+        assert(
+            context.reads.phase == 1
+                and context.reads.damage == 1
+                and context.reads.healing == 1
+                and context.reads.boss == 1
+                and context.reads.party == 1,
+            "Reset delayed or repeated its deferred native baselines"
+        )
+    end
+end)
 
 Test("deferred navigation skips unpublished boss and party views in both directions", function()
     local context = Meter()
@@ -778,6 +834,62 @@ Test("shared Reset includes party counters and preserves class metadata without 
     assert(context.reads.party == 1 and context:Row(1).entry.dmg == 230)
 end)
 
+Test("upgrade cards hide the legacy meter without losing recent samples or its Reset baseline", function()
+    for _, performance in ipairs({ false, true }) do
+        local c = Meter(function(context) context.settings.performanceMode = performance end)
+        c:Tick()
+        c.damage[1].dmg, c.env.AZS_RUN.t = 150, 11
+        c:Publish("AZSMETER")
+        c:Tick()
+        local row, allocated = c:Row(1), #c.objects
+        assert(row.entry.dps == 50, "choice fixture did not establish recent native-time samples")
+        c.phase = "choosing"
+        c:ResetCounts()
+        c:Tick()
+        assert(not c.root:IsShown() and not row:IsVisible() and row.entry.dmg == 150)
+        c.root:Show()
+        assert(not c.root:IsShown(), "another Show bypassed the legacy meter's card-choice hide")
+        NoMeterReads(c)
+        c:ResetCounts()
+        for _ = 1, 3 do
+            c:Tick()
+        end
+        NoMeterReads(c)
+        c:NoPresentationWrites()
+        assert(#c.objects == allocated and c.nativeShown == false)
+        c.phase = "playing"
+        c:Tick()
+        assert(c.root:IsVisible() and row.entry.dps == 50 and row.entry.dmg == 150)
+        assert(#c.objects == allocated, "return from cards rebuilt the legacy meter pool")
+        c.phase = "choosing"
+        c:Tick()
+        c:SetLayoutHidden(true)
+        c.phase = "playing"
+        c:Tick()
+        assert(not c.root:IsVisible(), "leaving cards ignored the Layout hide choice")
+        c:SetLayoutHidden(false)
+        c:Tick()
+        assert(c.root:IsVisible() and row.entry.dps == nil, "ordinary hiding retained the choice-only rate exception")
+        c.env.DFRL.ResetMeterStats()
+        c:Tick()
+        c.phase = "choosing"
+        c:Tick()
+        c.damage[1].dmg, c.env.AZS_RUN.t = 175, 12
+        c:Publish("AZSMETER")
+        c:Tick()
+        assert(not c.root:IsShown())
+        c.phase = "paused"
+        c:Tick()
+        assert(c.root:IsVisible() and row.entry.dmg == 25, "choice hiding replaced the legacy Reset baseline")
+        c.phase = "choosing"
+        c:Tick()
+        c:SetSetting("meterEnabled", false)
+        c.phase = "playing"
+        c:Tick()
+        assert(not c.root:IsShown() and not c.controller:GetScript("OnUpdate"))
+    end
+end)
+
 Test("unchanged meter publications skip counter traversal while native time keeps sampling", function()
     for _, performance in ipairs({ false, true }) do
         local context = Meter(function(c) c.settings.performanceMode = performance end)
@@ -1026,6 +1138,65 @@ Test("legacy rank groups refresh same-stamp publications without idle presentati
         NoMeterReads(context)
         assert(not context.controller:GetScript("OnUpdate"))
     end
+end)
+
+Test("legacy viewport scroll keeps full-source rolling observation on other tabs", function()
+    for _, performance in ipairs({ false, true }) do
+        local context = Meter(function(c)
+            c.settings.performanceMode, c.settings.meterShowRanks = performance, true
+            c.damage = {}
+            for index = 1, 40 do
+                c.damage[index] = { name = "Attack " .. index, dmg = (41 - index) * 100, dps = 10, share = 0, proc = 0 }
+            end
+            c.healing = { { name = "Regeneration", dmg = 10, dps = 1, share = 1, proc = 0 } }
+        end)
+        local function Advance(time)
+            context.env.AZS_RUN.t = time
+            local total = 0
+            for _, record in ipairs(context.damage) do
+                record.dmg = record.dmg + 100
+                total = total + record.dmg
+            end
+            for _, record in ipairs(context.damage) do
+                record.share = record.dmg / total
+            end
+            context:Publish("AZSMETER")
+        end
+        context:Tick()
+        Advance(11)
+        for _ = 1, 6 do
+            context:Tick()
+        end
+        local allocated, reads = #context.objects, context.reads.damage
+        context:Call(context.root, "OnMouseWheel", -20)
+        assert(context:Row(1).entry.name == "Attack 1" and context.reads.damage == reads)
+        context:Tick()
+        assert(context:Row(1).name:GetText() == "21. Attack 21" and context:Row(1).entry.dps == 100)
+        context:Cycle()
+        assert(context.title:GetText() == "Healing Done")
+        Advance(12)
+        context:ResetCounts()
+        context:Tick()
+        assert(context.reads.damage == 1, "another visible legacy tab stopped complete damage observation")
+        context:Cycle("RightButton")
+        assert(context.title:GetText() == "Damage Done" and context:Row(1).entry.dps == 100)
+        context:Call(context.root, "OnMouseWheel", -20)
+        context:Tick()
+        assert(context:Row(1).entry.name == "Attack 21" and context:Row(1).entry.dps == 100)
+        assert(#context.objects == allocated, "scrolling a legacy ledger allocated more visible rows")
+    end
+end)
+
+Test("legacy party rate-only updates remain validated after viewport sampling", function()
+    local context = Meter()
+    context:Party()
+    local valid = context.env.AZS_GetPartyMeter
+    local source, total, rate = valid()
+    context.env.AZS_GetPartyMeter = function() return source, total, rate end
+    context:Tick()
+    source[1].dps = -1
+    context:Tick()
+    assert(not context:Row(1):IsShown(), "invalid same-publication party rate reached visible formatting")
 end)
 
 print("PASS " .. passed .. " party meter contracts")

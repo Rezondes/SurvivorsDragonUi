@@ -58,6 +58,42 @@ An explicit Bash shell enables `pipefail`, so piping fixture/model output into
 
 ## UI work and cleanup tests
 
+Meter processing cases exercise growing native source/member lists through the
+production adapter and controller. Fixture-only counters check that ordinary
+counter changes reuse identity preparation, appended history reuses contribution
+positions, unchanged/rate-only summaries retain their ordering and controller
+row copies stay bounded by the viewport. Cases retain source/member/positive
+attribution changes, per-source metadata updates, unknown and mixed origins,
+clock-only rates, native errors, checkpoints and lifecycle retirement. Viewport
+cases cover immediate initialization of newly revealed identities, ranks and
+bar proportions, one-second displayed rates, shared refresh contexts, fresh
+manual Reset contexts, hidden/off work and both Performance Mode states. Legacy
+cases retain complete rolling observations while another meter tab is visible
+and same-publication Party rate validation. These cases are CI-only and were
+not run locally; operation counts do not establish native snapshot cost or FPS.
+
+Native history-cadence cases count positive-window and zero-window queries
+through the production adapter/controller. They cover shared one-Hz regular
+native/legacy reads, next-frame input/settings/scroll/Reset/show refreshes,
+extra zero-window reads within a native rate sample, newly revealed and replaced identities,
+unavailable history, warmup after atomic Reset, native checkpoint denominators,
+All, view return, hidden/off retirement and both Performance Mode states.
+Adapter cases keep physical query retries/captures separate and invalidate
+samples when attribution or context changes; counter/ordering updates retain a
+row's own sample. These cases remain CI-only and were not run locally. The
+query counts do not prove reduced native snapshot-copy cost or live FPS.
+
+Early row-piece cases count fixture-only getter, font, static-icon and bar
+operations through the production controller in both Performance Mode states.
+Settled rows retain their targeted numeric-font check while skipping text,
+width, per-row scale, metric and static-binding helpers. Cases cover unchanged
+compact captions, changed captions and leading amounts, proc colors, failed
+artwork retries, scrolling with pooled rows, width/scale/global font changes,
+unannounced numeric-font changes, failed font assignments and missing metrics.
+Existing portrait, legacy resolver, tooltip ownership and retirement cases
+retain those regular checks and cleanup boundaries. Coverage is CI-only and was
+not run locally; helper counts do not establish frame timings or FPS.
+
 Action-bar choice cases use the production display/bar owners and explicit fake
 native frames. They cover default-on normalization, shared preview/Confirm/Cancel,
 profiles and resets, native presentation restoration, retained attachment
@@ -101,6 +137,35 @@ before session Reset and rolling-rate observation. Metadata/language changes,
 pool reuse, hidden/off work and both Performance Mode states use the production
 owners over explicit fake boundaries. These cases are CI-only and were not
 executed locally; they do not prove native client behavior.
+
+Item-rank cases add differing rank-specific item IDs under one explicit item
+key, direct and item-bound sources, single actual-origin joins, independent
+components and item copies. They retain unknown/mixed origins, same-rank
+ambiguity, caster/owner/proc/variant/talent distinctions and original native
+records. They cover highest-rank captions/artwork readiness, missing rates,
+Reset, zero-display historical members, repeated pet sources, unchanged reuse,
+hidden/off work and both Performance Mode states. These cases remain CI-only
+and were not executed locally; no live Eye of Hakkar snapshot was available.
+
+Pet meter cases add explicit recorded hero/pet/summon/totem actors, overlapping
+spell names, repeated summon incarnations and native type-key fallbacks. They
+cover default spell/caster captions, optional pet summaries, native rates and
+checkpoint preservation, retained portraits, metadata changes, unchanged reuse,
+hidden/off work and both Performance Mode states. Display/editor cases cover
+default-off normalization, searchable controls, preview, Confirm, discard,
+profiles and resets. These cases remain CI-only and were not executed locally;
+they do not prove native actor metadata or live rendering.
+
+Talent proc cases join only each positive member's single actual native talent
+origin. They retain ordinary casts, proc colors, source IDs/counters/checkpoints
+and separate origin identities; definition-only, absent, conflicting, malformed
+or multiple origins keep the received source presentation. Full-controller
+cases show Pyroblast beside Hot Streak, FX Holy nova as Chastise and a generic
+received shaman talent caption, without a hardcoded spell/talent mapping. They
+cover metadata-only caption/artwork changes, pending/missing icon recovery,
+unchanged pooled writes, hidden/off work and both Performance Mode states.
+These cases remain CI-only and were not run locally. Actual Rockbiter, Hot Streak
+and Chastise native snapshots and live rendering remain unverified.
 
 The production banner fixture supplies an explicit `UIErrorsFrame.AddMessage`
 boundary and the generated fourteen-language native catalogs. Affix-warning
@@ -330,14 +395,26 @@ The assertions cover:
   invalidation and fresh synchronous first-use completion. They preserve the
   absence of new runtime test hooks and remain CI-only, without live FPS claims.
 
-- The remaining-frame pass adds CI-only cases for the default-off minimap clock,
-  centered zone text and display transactions; selective final-window cooldown
+- The remaining-frame pass adds CI-only cases for the default-on minimap clock,
+  saved off choices, missing/invalid and reset defaults, centered zone text while
+  off and display transactions; selective final-window cooldown
   reads; strict SCT retirement deadlines and native raid-icon UV forms; dirty
   boss marker reconciliation with exact active halos; settled loot hold/hidden
   expiry; Revive clipping reuse; event-driven player pulses; shared Layout
   samples/final release; unchanged waypoint math with active interpolation;
   lazy Chat time and observed/unreported tooltip owners. These fixtures are
   authored for CI and were not run locally; no live rendering/FPS is inferred.
+
+- Native local-clock cases in `ui_idle_clock_spec.lua` reuse the production
+  clock and shared HUD owner. They cover 24-hour conversion from native numeric
+  fields, midnight/noon, changed and backwards device readings, five-second and
+  hidden/off sampling, shared tooltip content and foreign owners, preview/Cancel,
+  world/logout/reload restoration, synchronous CVar callbacks and later external
+  preferences. Malformed/unavailable snapshots and missing fonts/failed text
+  assignments release native ownership and recover without a date fallback;
+  partial HUD support avoids visibility writes and
+  failed handoffs retire the duplicate custom caption. These authored CI-only
+  contracts do not verify native provider availability or live clock rendering.
 
 - Fallen-ally waypoint mocks load the production controller with explicit
   native roster boundaries and check dead/alive/ghost/disconnect retirement,
@@ -374,6 +451,12 @@ The assertions cover:
   clock reads and ten-Hz/deferred/fresh-hover boss-debuff work. Clock tests keep
   raw native phase/time/ownership and original effect inputs. These are CI-only
   call/lifecycle contracts and do not establish rendered parity or FPS gains.
+- API-timer presentation cases in `ui_aura_layout_perf_spec.lua` exercise
+  the production owner with explicit native boundaries. They cover bright,
+  text-free talent/jewelry timer icons with positive and zero remaining time, stable received
+  order at either anchor without ready/waiting movement, retained timer tooltips
+  and unchanged regular native aura handling. These authored cases remain
+  CI-only and were not run locally; native appearance remains unverified.
 - Extracted production unit-border transitions actually hide inactive party and
   portrait variants, restore the retained artwork on option changes and skip
   unchanged writes. These assertions distinguish shown state from alpha; they
@@ -521,6 +604,12 @@ The assertions cover:
   clears labels and the owner request while retaining pool reuse and empty-list
   idling. These mocks do not exercise native dragging or independently retest
   the shared Layout save/profile transaction.
+- SCT layer cases model a native MEDIUM character panel above every active text
+  owner, holder and visual frame across all three styles and both Performance
+  Mode states. They cover repeated style/pool reuse, ongoing hits while the
+  panel opens/closes, retained captions/expiry and no layer writes during
+  animation. This is a relative native-frame contract; it does not exercise
+  rendered panel occlusion, and the authored cases were not run locally.
 - Diablo IV style cases exercise the production SCT controller's full numeric
   formatting, native critical colors, icon/filter choices, compact launch,
   settled hold, fade deadline, unchanged work, style retirement, pool reuse and
@@ -743,6 +832,15 @@ when authorized. Local work remains limited to source review and pinned
 formatting; these regression tests and audits run in GitHub Actions.
 
 ## Pet and totem controller scenarios
+
+The meter view/legacy cases and `ui_pets_totems_spec.lua` cover temporary
+upgrade-card hiding in both Performance Mode states: complete roots and children
+hide, competing Show calls are rejected, unchanged choice passes perform no
+presentation writes or source/timer reads, and returning reuses the pool.
+Meter recent samples and native checkpoints survive; updated pet/totem receipts
+are applied on return. Disabling and world retirement still prevent stale
+reappearance. These cases are authored for CI only and were not run locally;
+they do not prove the native card overlay or actual hide/show timing.
 
 `ui_pets_totems_spec.lua` loads the production PetFrames module against fake
 native getters, snapshots, phase and run time. It covers unchanged grouped pets

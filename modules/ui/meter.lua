@@ -1,8 +1,9 @@
 -- The War Within artwork: Karl-HeinzSchneider, MIT; shipped notice in
 -- media/tex/meter/LICENSE.txt. Pinned source: third_party/DetailsTWW-ARTWORK.md.
+-- Reset glyph: Blizzard Entertainment; provenance in the same source notes.
 -- The existing gold ring retains third_party/Jewelry-ARTWORK.md's provenance.
 DFRL:NewMod("DamageMeter", 7, function()
-    local HEADER, ROW_HEIGHT, FOOTER = 32, 32, 32
+    local HEADER, ROW_HEIGHT, FOOTER, REFRESH_SECONDS = 32, 32, 32, 1
     local width, fontSize = 240, DFRL.display.Get("meterFontSize")
     local nameFontSize = DFRL.display.Get("meterNameFontSize")
     local enabled = DFRL.display.Get("meterEnabled")
@@ -13,6 +14,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         percentage = "meterShowPercentage",
         icons = "meterShowIcons",
         ranks = "meterShowRanks",
+        groupPets = "meterGroupPets",
         total = "meterShowTotal",
         totalDps = "meterShowTotalDps",
     }
@@ -26,7 +28,7 @@ DFRL:NewMod("DamageMeter", 7, function()
     local path = DFRL:GetInfoOrCons("tex")
     local native = T.NewHudOwner("meter", "hudMeter")
     local api = type(T.NewNativeMeter) == "function" and T.NewNativeMeter() or nil
-    local apiActive, apiIdentity = false, {}
+    local apiActive, apiIdentity, nativeContext = false, {}, nil
     local modes = {
         {
             getter = "AZS_GetMeter",
@@ -34,7 +36,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             prefix = "AZSMETER",
             title = "Damage Done",
             rate = "DPS",
-            query = { metric = "damage", scope = "self", period = "run", groupBy = "source" },
+            query = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" },
         },
         {
             getter = "AZS_GetHealing",
@@ -57,7 +59,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             prefix = "AZSBOSSDMG",
             title = "Boss Damage",
             rate = "DPS",
-            query = { metric = "damage", scope = "self", period = "encounter", groupBy = "source" },
+            query = { metric = "damage", scope = "self", period = "encounter", groupBy = "actor_source" },
         },
         {
             getter = "AZS_GetPartyMeter",
@@ -73,7 +75,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         if not selected.party then selected.groups = T.NewMeterSourceGroups() end
     end
     local phases = { playing = true, choosing = true, paused = true, dead = true, victory = true }
-    local mode, offset, age = 1, 0, 0.2
+    local mode, offset, age = 1, 0, REFRESH_SECONDS
     local inWorld, editing, ready, faulted = true, false, true, false
     local rows, received, blocked = {}, {}, {}
     local receipts, publications, publicationSequence = {}, {}, 0
@@ -87,10 +89,17 @@ DFRL:NewMod("DamageMeter", 7, function()
     }
     local dataDirty, dataValid = true, false
     local snapshot = { rows = {}, count = 0 }
-    local rateSamples, rateSampledAt = {}, nil
+    local rateSamples, rateSampledAt, ratePass = {}, nil, 0
+    local recentView = {}
     local dps = T.NewMeterDps(DFRL.display.Get("meterDpsWindow"))
     local session, resetPending = T.NewMeterSession(), false
-    local presentation = { shown = false, cleared = true }
+    local presentation = {
+        shown = false,
+        cleared = true,
+        fontChoice = DFRL.display.Get("uiFont"),
+        fontOutline = DFRL.display.Get("uiFontOutline"),
+        fontRevision = 0,
+    }
     local tooltipState = {}
     local hovered
     local root = CreateFrame("Frame", "DFRL_DamageMeter", UIParent)
@@ -148,6 +157,11 @@ DFRL:NewMod("DamageMeter", 7, function()
             rateSamples[name] = nil
         end
     end
+    local function SuspendRates()
+        dps.Suspend()
+        ClearSamples()
+        if api then api.SuspendRecent() end
+    end
     local function Compact(value)
         if value >= 1000000000 then return string.format("%.1fB", value / 1000000000) end
         if value >= 1000000 then return string.format("%.1fM", value / 1000000) end
@@ -193,17 +207,25 @@ DFRL:NewMod("DamageMeter", 7, function()
     end
     local function ClearIcon(row)
         row.circularIcon.Clear()
+        row.staticIcon, row.staticScale, row.staticBound = nil, nil, nil
         if row.rim:IsShown() then row.rim:Hide() end
         row.partyUnit, row.partyName, row.partySource, row.partyTexture = nil, nil, nil, nil
         row.apiPortraitKey, row.apiPortraitRun = nil, nil
         row.apiPortraitBound, row.apiPortraitRetryAt = nil, nil
     end
     local function BindIcon(row, icon)
+        row.staticBound = nil
         if not icon then
             ClearIcon(row)
             return false
         end
-        return row.circularIcon.Bind(icon)
+        return row.circularIcon.Bind(icon, presentation.scale)
+    end
+    local function BindStaticIcon(row, icon)
+        if row.staticBound and row.staticIcon == icon and row.staticScale == presentation.scale then return true end
+        local bound = BindIcon(row, icon)
+        row.staticIcon, row.staticScale, row.staticBound = icon, presentation.scale, bound
+        return bound
     end
     local function ClearPartyUnits()
         for _, candidate in ipairs(partyUnits) do
@@ -394,20 +416,23 @@ DFRL:NewMod("DamageMeter", 7, function()
             mode, language, optionsRevision
         presentation.headerWaiting = presentation.waiting
     end
-    -- Blizzard's existing gold X and native button states; see Character-ARTWORK.md.
+    -- Blizzard's gold refresh glyph and native button states; see DetailsTWW-ARTWORK.md.
     local resetButton = CreateFrame("Button", nil, header)
     resetButton:SetPoint("RIGHT", header, "RIGHT", -12, 1)
     resetButton:SetWidth(16)
     resetButton:SetHeight(16 * 38 / 36)
     resetButton:RegisterForClicks("LeftButtonUp")
-    for _, entry in ipairs({ { "Normal", 0, 0 }, { "Pushed", 64, 0 }, { "Highlight", 64, 64 } }) do
-        resetButton["Set" .. entry[1] .. "Texture"](resetButton, path .. "character\\Close.blp")
-        local texture = resetButton["Get" .. entry[1] .. "Texture"](resetButton)
+    for _, state in ipairs({ "Normal", "Pushed", "Highlight" }) do
+        resetButton["Set" .. state .. "Texture"](resetButton, path .. "meter\\Reset.blp")
+        local texture = resetButton["Get" .. state .. "Texture"](resetButton)
         if texture then
-            texture:SetTexCoord(entry[2] / 128, (entry[2] + 36) / 128, entry[3] / 128, (entry[3] + 38) / 128)
+            texture:SetTexCoord(0, 1, 0, 1)
             texture:ClearAllPoints()
-            texture:SetAllPoints(resetButton)
-            if entry[1] == "Highlight" then texture:SetBlendMode("ADD") end
+            texture:SetPoint("CENTER", resetButton, "CENTER", 0, 0)
+            texture:SetWidth(16)
+            texture:SetHeight(16)
+            if state == "Pushed" then texture:SetVertexColor(0.65, 0.65, 0.65) end
+            if state == "Highlight" then texture:SetBlendMode("ADD") end
         end
     end
 
@@ -456,6 +481,7 @@ DFRL:NewMod("DamageMeter", 7, function()
 
     local presentationWidth, presentationFontSize = width, fontSize
     local function PreparePresentation()
+        presentation.scale = root:GetEffectiveScale()
         if presentationWidth ~= width then
             header:SetWidth(width)
             total:SetWidth(width - 52)
@@ -533,6 +559,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         row:SetScript("OnLeave", HideTooltip)
         row:SetScript("OnHide", function()
             row.valueMetric = nil
+            row.layoutReady = nil
             HideTooltip()
         end)
         row:Hide()
@@ -543,6 +570,29 @@ DFRL:NewMod("DamageMeter", 7, function()
     Row(1)
     local function LayoutRow(row)
         local columns = (options.damage and 1 or 0) + (options.dps and 1 or 0) + (options.percentage and 1 or 0)
+        local face, size, flags
+        -- Native font changes can affect just one label without a settings edit.
+        if columns > 0 then
+            face, size, flags = row.value:GetFont()
+        end
+        local scale = presentation.scale
+        if
+            row.layoutReady
+            and (columns == 0 or row.valueMetric ~= nil)
+            and row.layoutWidth == width
+            and row.layoutIcons == options.icons
+            and row.valueColumns == columns
+            and row.layoutText == row.valueText
+            and row.layoutNameFontSize == nameFontSize
+            and (columns == 0 or row.layoutFontSize == fontSize)
+            and row.layoutFontRevision == presentation.fontRevision
+            and row.layoutFace == face
+            and row.layoutSize == size
+            and row.layoutFlags == flags
+            and T.NearlyEqual(row.layoutScale, scale)
+        then
+            return
+        end
         local nameLeft = options.icons and 35 or 3
         if row.layoutWidth ~= width then row:SetWidth(width - 16) end
         if row.layoutIcons ~= options.icons or row.layoutWidth ~= width then
@@ -557,18 +607,17 @@ DFRL:NewMod("DamageMeter", 7, function()
         if row.layoutNameFontSize ~= nameFontSize and SizeLabel(row.name, nameFontSize, nameFontSize + 5) then
             row.layoutNameFontSize = nameFontSize
         end
-        if columns > 0 and row.layoutFontSize ~= fontSize and SizeLabel(row.value, fontSize, fontSize + 5) then
-            row.layoutFontSize = fontSize
+        if columns > 0 and row.layoutFontSize ~= fontSize then
+            if SizeLabel(row.value, fontSize, fontSize + 5) then row.layoutFontSize = fontSize end
+            face, size, flags = row.value:GetFont()
         end
         local available = width - 16 - nameLeft - 2
-        local valueWidth = 0
+        local valueWidth, measuredReady = 0, columns == 0
         if columns > 0 then
             -- Reserve only the current numeric caption's natural width. Keep
             -- the old conservative reservation until native metrics are ready.
             valueWidth = columns * math.ceil(58 * fontSize / 11)
-            local text = row.value:GetText()
-            local face, size, flags = row.value:GetFont()
-            local scale = row:GetEffectiveScale()
+            local text = row.valueText
             local metric = row.valueMetric
             if
                 metric
@@ -580,6 +629,7 @@ DFRL:NewMod("DamageMeter", 7, function()
                 and metric.available == available
             then
                 valueWidth = metric.width
+                measuredReady = true
             elseif face and Number(size) and size > 0 and Number(scale) and scale > 0 and text and text ~= "" then
                 local measured = row.value:GetStringWidth()
                 if Number(measured) and measured > 0 then
@@ -588,6 +638,7 @@ DFRL:NewMod("DamageMeter", 7, function()
                     metric.scale, metric.available, metric.width = scale, available, math.ceil(measured) + 1
                     row.valueMetric = metric
                     valueWidth = metric.width
+                    measuredReady = true
                 end
             end
             valueWidth = math.min(valueWidth, math.max(1, available - 5 - 48))
@@ -604,6 +655,11 @@ DFRL:NewMod("DamageMeter", 7, function()
         end
         row.layoutIcons, row.valueColumns = options.icons, columns
         row.layoutWidth = width
+        row.layoutText, row.layoutFace, row.layoutSize, row.layoutFlags = row.valueText, face, size, flags
+        row.layoutScale, row.layoutFontRevision = scale, presentation.fontRevision
+        row.layoutReady = measuredReady
+            and row.layoutNameFontSize == nameFontSize
+            and (columns == 0 or row.layoutFontSize == fontSize)
     end
     local function ClearRow(row)
         if not row or not row.active then return end
@@ -614,7 +670,9 @@ DFRL:NewMod("DamageMeter", 7, function()
         row.fraction = 0
         row.entry, row.displayName, row.drawIndex, row.drawDamage, row.drawRate, row.drawShare =
             nil, nil, nil, nil, nil, nil
-        row.drawRevision = nil
+        row.drawDamageShown, row.drawDpsShown, row.drawShareShown = nil, nil, nil
+        row.valueText, row.layoutReady = nil, nil
+        row.fractionDamage, row.fractionMaximum = nil, nil
         row.valueMetric = nil
         if row:IsShown() then row:Hide() end
         row.active = false
@@ -628,8 +686,9 @@ DFRL:NewMod("DamageMeter", 7, function()
         end
         snapshot.count, snapshot.total, snapshot.rate, snapshot.averageRate = 0, nil, nil, nil
         snapshot.source, snapshot.publication = nil, nil
+        snapshot.maximum, snapshot.offset, snapshot.visible = nil, nil, nil
         snapshot.nativeRunId, snapshot.nativeEpoch, snapshot.nativeAuthority = nil, nil, nil
-        snapshot.nativeEncounter = nil
+        snapshot.nativeEncounter, snapshot.nativeRunSeconds = nil, nil
         ClearSamples()
         for key in pairs(snapshot.rows) do
             snapshot.rows[key] = nil
@@ -644,6 +703,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         native.Release()
     end
     local function ClearReadPass()
+        nativeContext = nil
         if not viewSelection.read then return end
         for index = 1, table.getn(modes) do
             local entry = viewSelection.reads[index]
@@ -685,12 +745,33 @@ DFRL:NewMod("DamageMeter", 7, function()
         if selected.groups and viewSelection.paint then
             source = selected.groups.Read(source, publication)
             if not source then return nil, nil, nil, "Meter data is unavailable." end
+        elseif selected.party then
+            for _, entry in ipairs(source) do
+                if type(entry) ~= "table" or not Number(entry.dps) then
+                    return nil, nil, nil, "Meter data is unavailable."
+                end
+            end
         end
         return source, amount, rate, nil, publication
     end
     local function ReadNative(index)
         local selected = modes[index]
-        if apiActive then return api.Read(selected.query, index == 1 and dps.window or 0) end
+        if apiActive then
+            local window = index == 1 and dps.window or 0
+            local policy
+            if window > 0 then
+                local now = GetTime()
+                recentView.offset, recentView.count = offset, visible
+                recentView.refresh = not rateSampledAt
+                    or now < rateSampledAt
+                    or now - rateSampledAt >= 1
+                    or index ~= mode
+                    or viewSelection.first ~= nil
+                    or viewSelection.dirty
+                policy = recentView
+            end
+            return api.Read(selected.query, window, options.groupPets, nativeContext, policy)
+        end
         local getter = _G[selected.getter]
         if type(getter) ~= "function" then
             publications[index] = nil
@@ -828,15 +909,16 @@ DFRL:NewMod("DamageMeter", 7, function()
                 or snapshot.nativeEpoch ~= meta.counterEpoch
                 or snapshot.nativeAuthority ~= meta.authorityId
                 or snapshot.nativeEncounter ~= meta.encounterId
+                or (snapshot.nativeRunSeconds and meta.asOfRunSeconds < snapshot.nativeRunSeconds)
             then
                 ClearSamples()
             end
             snapshot.nativeRunId, snapshot.nativeEpoch, snapshot.nativeAuthority =
                 meta.runId, meta.counterEpoch, meta.authorityId
             snapshot.nativeEncounter = meta.encounterId
+            snapshot.nativeRunSeconds = meta.asOfRunSeconds
             if type(DFRL.locale.Select) == "function" then DFRL.locale.Select(meta.languageCode) end
         end
-        local nativeSource = source
         if not apiActive then
             source, amount, rate = session.Apply(mode, source, amount, rate, RunSeconds(), publication)
         end
@@ -851,11 +933,6 @@ DFRL:NewMod("DamageMeter", 7, function()
             or now - rateSampledAt >= 1
             or (snapshot.total and amount < snapshot.total)
         if sampleRates then
-            for _, entry in ipairs(nativeSource) do
-                if not Number(entry.dps) and not (apiActive and entry.dps == nil) then
-                    return false, "Meter data is unavailable."
-                end
-            end
             if apiActive then
                 snapshot.rate, snapshot.averageRate = rate, meta and meta.averageRate
             elseif mode == 1 then
@@ -865,14 +942,23 @@ DFRL:NewMod("DamageMeter", 7, function()
             end
             rateSampledAt = now
         end
-        local countersChanged = snapshot.publication ~= publication or snapshot.source ~= source
-        if not countersChanged and not sampleRates then return true end
-        for index, entry in ipairs(source) do
+        offset = math.max(0, math.min(offset, count - visible))
+        local countersChanged = snapshot.publication ~= publication
+            or snapshot.source ~= source
+            or snapshot.count ~= count
+            or snapshot.total ~= amount
+        local viewportChanged = snapshot.offset ~= offset or snapshot.visible ~= visible
+        if not countersChanged and not sampleRates and not viewportChanged then return true end
+        ratePass = ratePass + 1
+        local displayed = math.min(visible, count - offset)
+        for index = 1, displayed do
+            local entry = source[index + offset]
             local copy = snapshot.rows[index] or {}
-            if countersChanged then
+            if countersChanged or viewportChanged then
                 copy.name, copy.dmg, copy.share, copy.proc = entry.name, entry.dmg, entry.share, entry.proc
                 copy.class = modes[mode].party and type(entry.class) == "string" and entry.class or nil
                 copy.rowId, copy.icon = entry.rowId, entry.icon
+                copy.rateIdentity = apiActive and entry.rateIdentity or nil
                 copy.portraitKey, copy.portraitRunId = entry.portraitKey, entry.portraitRunId
                 copy.portraitStatus = entry.portraitStatus
             end
@@ -888,7 +974,7 @@ DFRL:NewMod("DamageMeter", 7, function()
                 sample = {}
                 samples[proc] = sample
             end
-            if sample.epoch ~= rateSampledAt then
+            if sample.epoch ~= rateSampledAt or (apiActive and sample.identity ~= copy.rateIdentity) then
                 if apiActive then
                     sample.rate, sample.average = entry.dps, entry.averageDps
                 elseif mode == 1 then
@@ -896,27 +982,35 @@ DFRL:NewMod("DamageMeter", 7, function()
                 else
                     sample.rate, sample.average = entry.dps, nil
                 end
-                sample.epoch = rateSampledAt
+                sample.epoch, sample.identity = rateSampledAt, copy.rateIdentity
             end
+            sample.seen = ratePass
             copy.dps, copy.averageDps = sample.rate, sample.average
             snapshot.rows[index] = copy
         end
-        if countersChanged then
-            for index = count + 1, snapshot.count do
-                snapshot.rows[index] = nil
+        for key, samples in pairs(rateSamples) do
+            for proc, sample in pairs(samples) do
+                if sample.seen ~= ratePass then samples[proc] = nil end
             end
-            table.setn(snapshot.rows, count)
-            snapshot.count, snapshot.total = count, amount
-            snapshot.source, snapshot.publication = source, publication
+            if not next(samples) then rateSamples[key] = nil end
         end
+        for index = displayed + 1, table.getn(snapshot.rows) do
+            snapshot.rows[index] = nil
+        end
+        table.setn(snapshot.rows, displayed)
+        snapshot.count, snapshot.total = count, amount
+        snapshot.maximum = source[1] and source[1].dmg or 0
+        snapshot.source, snapshot.publication = source, publication
+        snapshot.offset, snapshot.visible = offset, visible
         presentation.cleared = false
         return true
     end
     local function Draw()
         offset = math.max(0, math.min(offset, snapshot.count - visible))
-        local maximum = snapshot.rows[1] and snapshot.rows[1].dmg or 0
+        local maximum = snapshot.maximum or 0
         local party = modes[mode].party
         local classColor = party and PARTY_COLOR or T.GetPlayerClassColor() or { 0.8, 0.63, 0.28 }
+        local classRed, classGreen, classBlue = unpack(classColor)
         if party and options.icons and not apiActive then
             if snapshot.count > 0 then
                 ReadPartyUnits()
@@ -925,13 +1019,13 @@ DFRL:NewMod("DamageMeter", 7, function()
             end
         end
         for index = 1, visible do
-            local entry = snapshot.rows[index + offset]
+            local entry = snapshot.rows[index]
             if entry then
                 local row = Row(index)
                 if hovered == row and row.displayName ~= entry.name then HideTooltip() end
                 row.entry, row.active = entry, true
                 local rank = options.ranks and index + offset or nil
-                if row.displayName ~= entry.name or row.drawIndex ~= rank or row.drawRevision ~= optionsRevision then
+                if row.displayName ~= entry.name or row.drawIndex ~= rank then
                     T.SetTextIfChanged(row.name, rank and (tostring(rank) .. ". " .. entry.name) or entry.name)
                     row.displayName, row.drawIndex = entry.name, rank
                 end
@@ -942,7 +1036,9 @@ DFRL:NewMod("DamageMeter", 7, function()
                     row.drawDamage ~= damage
                     or row.drawRate ~= rate
                     or row.drawShare ~= share
-                    or row.drawRevision ~= optionsRevision
+                    or row.drawDamageShown ~= options.damage
+                    or row.drawDpsShown ~= options.dps
+                    or row.drawShareShown ~= options.percentage
                 then
                     local values = damage and Compact(damage) or ""
                     if options.dps then
@@ -952,34 +1048,49 @@ DFRL:NewMod("DamageMeter", 7, function()
                         values = values .. (values ~= "" and "   " or "") .. string.format("%.1f%%", share * 100)
                     end
                     T.SetTextIfChanged(row.value, values)
+                    row.valueText = values
                     row.drawDamage, row.drawRate, row.drawShare = damage, rate, share
+                    row.drawDamageShown, row.drawDpsShown, row.drawShareShown =
+                        options.damage, options.dps, options.percentage
                 end
-                row.drawRevision = optionsRevision
                 LayoutRow(row)
-                local fraction = maximum > 0 and math.min(1, entry.dmg / maximum) or 0
-                if row.fraction ~= fraction then row.bar:SetValue(fraction) end
-                row.fraction = fraction
-                local r, g, b = unpack(classColor)
-                if party then
-                    local color = T.GetClassColor(entry.class)
-                    if color then
-                        r, g, b = unpack(color)
-                    else
-                        r, g, b = 0.6, 0.6, 0.6
-                    end
-                elseif entry.proc == 1 then
-                    r, g, b = 0.25, 0.58, 1
+                if row.fractionDamage ~= entry.dmg or row.fractionMaximum ~= maximum then
+                    local fraction = maximum > 0 and math.min(1, entry.dmg / maximum) or 0
+                    if row.fraction ~= fraction then row.bar:SetValue(fraction) end
+                    row.fraction, row.fractionDamage, row.fractionMaximum = fraction, entry.dmg, maximum
                 end
-                if row.red ~= r or row.green ~= g or row.blue ~= b then row.bar:SetStatusBarColor(r, g, b) end
-                row.red, row.green, row.blue = r, g, b
+                if
+                    party
+                    or row.colorParty ~= party
+                    or row.colorProc ~= entry.proc
+                    or row.colorRed ~= classRed
+                    or row.colorGreen ~= classGreen
+                    or row.colorBlue ~= classBlue
+                then
+                    local r, g, b = classRed, classGreen, classBlue
+                    if party then
+                        local color = T.GetClassColor(entry.class)
+                        if color then
+                            r, g, b = unpack(color)
+                        else
+                            r, g, b = 0.6, 0.6, 0.6
+                        end
+                    elseif entry.proc == 1 then
+                        r, g, b = 0.25, 0.58, 1
+                    end
+                    if row.red ~= r or row.green ~= g or row.blue ~= b then row.bar:SetStatusBarColor(r, g, b) end
+                    row.red, row.green, row.blue = r, g, b
+                    row.colorParty, row.colorProc = party, entry.proc
+                    row.colorRed, row.colorGreen, row.colorBlue = classRed, classGreen, classBlue
+                end
                 if options.icons then
                     local bound
-                    if party and apiActive then
+                    if apiActive and (party or entry.portraitKey) then
                         bound = BindNativePortrait(row, entry)
                     elseif party then
                         bound = BindPartyIcon(row, entry)
                     elseif apiActive then
-                        bound = BindIcon(row, entry.icon or UNKNOWN_ICON)
+                        bound = BindStaticIcon(row, entry.icon or UNKNOWN_ICON)
                     else
                         local resolver = DFRL.sct and DFRL.sct.GetSourceIcon
                         local icon = type(resolver) == "function"
@@ -1056,6 +1167,7 @@ DFRL:NewMod("DamageMeter", 7, function()
                     context.runId, context.counterEpoch, context.authorityId
                 apiIdentity.encounter = context.encounter and context.encounter.encounterId
             end
+            nativeContext = context
         elseif type(AZS_GetPhase) == "function" then
             ok, phase = pcall(AZS_GetPhase)
         end
@@ -1081,6 +1193,8 @@ DFRL:NewMod("DamageMeter", 7, function()
         end
         -- Native context owns v1 phase/run identity; legacy clients retain packets.
         local ok, phase = ReadPhase()
+        local wasChoiceHidden = presentation.choiceHidden
+        presentation.choiceHidden = ok and phase == "choosing" or false
         if not ok or not phases[phase] then
             if phase == "ready" then
                 Invalidate()
@@ -1090,7 +1204,14 @@ DFRL:NewMod("DamageMeter", 7, function()
             SetShown(false)
             return
         end
+        if presentation.choiceHidden then
+            -- Choice cards hide presentation without retiring the active session.
+            SetShown(false)
+            native.Acquire()
+            return
+        end
         local paint = not DFRL.layout.IsHidden("damageMeter") and UIParent:IsVisible()
+        if wasChoiceHidden and not paint then SuspendRates() end
         if paint and not viewSelection.paint then viewSelection.dirty = true end
         viewSelection.paint = paint
         if not paint and not dataDirty then
@@ -1150,7 +1271,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         else
             viewSelection.first, viewSelection.steps = direction, 0
         end
-        viewSelection.direction, age = direction, 0.2
+        viewSelection.direction, age = direction, REFRESH_SECONDS
     end)
     header:SetScript("OnEnter", ShowHeaderTooltip)
     header:SetScript("OnLeave", HideTooltip)
@@ -1170,18 +1291,24 @@ DFRL:NewMod("DamageMeter", 7, function()
     root:SetScript("OnHide", function()
         viewSelection.paint = false
         HideTooltip()
-        dps.Suspend()
-        ClearSamples()
+        if not presentation.choiceHidden then SuspendRates() end
         for _, row in ipairs(rows) do
             row.valueMetric = nil
+            row.layoutReady = nil
         end
     end)
-    root:SetScript("OnShow", function() age = 0.2 end)
+    root:SetScript("OnShow", function()
+        if presentation.choiceHidden then
+            root:Hide()
+            return
+        end
+        if not viewSelection.paint then age = REFRESH_SECONDS end
+    end)
     root:SetScript("OnMouseWheel", function()
         if editing then return end
         HideTooltip()
         offset = math.max(0, math.min(offset - (tonumber(arg1) or 0), snapshot.count - visible))
-        age = 0.2
+        age = REFRESH_SECONDS
     end)
     DFRL.layout.Register("damageMeter", root, function()
         root:ClearAllPoints()
@@ -1196,10 +1323,10 @@ DFRL:NewMod("DamageMeter", 7, function()
             DFRL.display.Set("meterRows", math.floor((height - HEADER - FOOTER) / ROW_HEIGHT + 0.5))
         end,
         onResize = function(frame)
-            width, age = frame:GetWidth(), 0.2
+            width, age = frame:GetWidth(), REFRESH_SECONDS
         end,
         onEdit = function(active)
-            editing, age = active, 0.2
+            editing, age = active, REFRESH_SECONDS
             HideTooltip()
             header:EnableMouse(not active)
             resetButton:EnableMouse(not active)
@@ -1208,7 +1335,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             end
         end,
         onReset = function()
-            mode, offset, age, faulted = 1, 0, 0.2, false
+            mode, offset, age, faulted = 1, 0, REFRESH_SECONDS, false
             viewSelection.first, viewSelection.steps, viewSelection.dirty = nil, 0, true
             dataDirty = true
             HideTooltip()
@@ -1228,28 +1355,45 @@ DFRL:NewMod("DamageMeter", 7, function()
         local selectedFontSize = DFRL.display.Get("meterFontSize")
         local selectedNameFontSize = DFRL.display.Get("meterNameFontSize")
         local fontChanged = fontSize ~= selectedFontSize or nameFontSize ~= selectedNameFontSize
+        local fontChoice, fontOutline = DFRL.display.Get("uiFont"), DFRL.display.Get("uiFontOutline")
+        local styleChanged = presentation.fontChoice ~= fontChoice or presentation.fontOutline ~= fontOutline
         local window = DFRL.display.Get("meterDpsWindow")
         local windowChanged = dps.window ~= window
-        local changed, iconsWereShown = false, options.icons
+        local changed, iconsWereShown, petsWereCombined = false, options.icons, options.groupPets
         for key, setting in pairs(optionKeys) do
             local value = DFRL.display.Get(setting)
             if options[key] ~= value then
                 options[key], changed = value, true
             end
         end
-        if visible == count and not changed and not enabledChanged and not fontChanged and not windowChanged then
+        if
+            visible == count
+            and not changed
+            and not enabledChanged
+            and not fontChanged
+            and not styleChanged
+            and not windowChanged
+        then
             return
         end
         HideTooltip()
         enabled = enable
         fontSize = selectedFontSize
         nameFontSize = selectedNameFontSize
+        if styleChanged then
+            presentation.fontChoice, presentation.fontOutline = fontChoice, fontOutline
+            presentation.fontRevision = presentation.fontRevision + 1
+        end
         if windowChanged then
             dps.SetWindow(window)
             ClearSamples()
         end
+        if petsWereCombined ~= options.groupPets then
+            ClearSamples()
+            ClearReadPass()
+        end
         if changed then optionsRevision = optionsRevision + 1 end
-        visible, age = count, 0.2
+        visible, age = count, REFRESH_SECONDS
         offset = math.max(0, math.min(offset, snapshot.count - visible))
         for index = visible + 1, table.getn(rows) do
             ClearRow(rows[index])
@@ -1277,7 +1421,7 @@ DFRL:NewMod("DamageMeter", 7, function()
         end
         ClearSamples()
         dataDirty = true
-        age = 0.2
+        age = REFRESH_SECONDS
     end)
     function DFRL.ResetMeterStats()
         if not enabled or not inWorld or not ready or faulted then return end
@@ -1300,12 +1444,12 @@ DFRL:NewMod("DamageMeter", 7, function()
             T.SetTextIfChanged(status, "")
             if status:IsShown() then status:Hide() end
         end
-        dataDirty, age = true, 0.2
+        dataDirty, age = true, REFRESH_SECONDS
     end
     Tick = function()
         if not inWorld then return end
         age = age + (tonumber(arg1) or 0)
-        if age < 0.2 then return end
+        if age < REFRESH_SECONDS then return end
         age = 0
         local ok, message = pcall(Refresh)
         ClearReadPass()
@@ -1331,7 +1475,7 @@ DFRL:NewMod("DamageMeter", 7, function()
     end
     controller:SetScript("OnEvent", function()
         if event == "PLAYER_ENTERING_WORLD" then
-            inWorld, faulted, age = true, false, 0.2
+            inWorld, faulted, age = true, false, REFRESH_SECONDS
             UpdateController()
         elseif event == "PLAYER_LEAVING_WORLD" or event == "PLAYER_LOGOUT" then
             inWorld = false
@@ -1339,7 +1483,7 @@ DFRL:NewMod("DamageMeter", 7, function()
             UpdateController()
         elseif event == "CVAR_UPDATE" then
             if native.Observe(arg1) then
-                age = 0.2
+                age = REFRESH_SECONDS
                 UpdateController()
             end
         elseif event == "CHAT_MSG_ADDON" and enabled then
@@ -1355,7 +1499,7 @@ DFRL:NewMod("DamageMeter", 7, function()
                     end
                 end
             end
-            -- The five-Hz read coalesces packets and runs after native parsing.
+            -- The one-second read coalesces packets and runs after native parsing.
         end
     end)
     if type(_G.ReloadUI) == "function" then

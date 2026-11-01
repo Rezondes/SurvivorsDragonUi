@@ -11,6 +11,44 @@ end
 
 local SCT = dofile("scripts/tests/fixtures/ui_sct_helpers.lua")
 
+Test("all SCT styles stay below Character across pooled reuse without hiding combat text", function()
+    local order = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, TOOLTIP = 6 }
+    for _, performance in ipairs({ false, true }) do
+        local context = SCT(false, function(setup, env)
+            setup.settings.performanceMode = performance
+            env.CharacterFrame = env.CreateFrame("Frame", "CharacterFrame", env.UIParent)
+            env.CharacterFrame:SetFrameStrata("MEDIUM")
+        end)
+        local character, pooled = context.env.CharacterFrame
+        for _, style in ipairs({ "diablo", "msbt", "enemy", "diablo", "msbt" }) do
+            context:SetSetting("sctStyle", style)
+            context:Hit(1234)
+            context:Tick(0.4)
+            local label = assert(context:Labels()[1], "opening Character suppressed world combat text")
+            local caption = label:GetText()
+            pooled = pooled or label
+            assert(label == pooled, "style reuse replaced the SCT text pool")
+            local visual = label:GetParent()
+            local holder = visual:GetParent()
+            local root = style == "msbt" and context.scrollRoot or context.textRoot
+            assert(holder:GetParent() == root, "pooled SCT holder retained another style's owner")
+            -- Check SCT's drawing owners, not the fixture's non-drawing Layout mask.
+            for _, frame in ipairs({ visual, holder, root, context.textRoot }) do
+                assert(order[frame:GetFrameStrata()] < order[character:GetFrameStrata()], "SCT rose above Character")
+            end
+            context:ResetCounts()
+            character:Hide()
+            context:Tick(0.05)
+            character:Show()
+            context:Tick(0.05)
+            assert(context:Labels()[1] == label and label:GetText() == caption)
+            assert(not context.writes.SetFrameStrata, "panel visibility added repeated SCT layer writes")
+            context:Tick(2)
+            assert(#context:Labels() == 0, "panel visibility restarted an active hit's lifetime")
+        end
+    end
+end)
+
 Test("numeric SCT keeps independent font ownership in both performance modes", function()
     for _, performance in ipairs({ false, true }) do
         local context = SCT(true, function(setup, env)

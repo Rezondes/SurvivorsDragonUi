@@ -3,7 +3,7 @@
 The October 2026 performance work removes repeated presentation writes while
 retaining native data, pause-aware timing, saved preferences and artwork.
 It adds no gameplay clock or native client dependency. Display choices use the
-existing saved display table; the optional minimap clock below defaults off.
+existing saved display table; the optional minimap clock below defaults on.
 
 Pet and meter image textures share `T.NewCircularIcon` for native circular
 binding and the lazy physical-pixel strip fallback. Each view keeps its original
@@ -39,7 +39,7 @@ state; source review and formatting do not establish live appearance or FPS.
 ## Native meter and live navigation API — draft
 
 The v1 meter adapter adds no frame, drawing region, asset, event, updater or
-SavedVariable. It reuses the existing five-Hz reader and one-Hz displayed rates,
+SavedVariable. It reuses the shared one-Hz regular reader and displayed rates,
 four bounded reusable source buffers and stable native row IDs. Native recent
 rates and checkpoints bypass local damage-history observation and baselines;
 native descriptors bypass name/icon scanners and party-unit portrait matching.
@@ -87,6 +87,156 @@ summary. Added frame/region/asset/event/updater/setting/SavedVariable cost is
 zero; hidden/off work and retirement remain with the current owners. CI-only
 cases were authored and not run locally; this is no measured rendering or FPS
 result.
+
+Item-rank summaries reuse this same family/row pool and instant presentation.
+Direct native item keys avoid name or equipment lookups. Item-bound effects can
+join one actual item origin per positive member through the incremental member
+and contribution-position caches below. No recursive relationship walk, native
+getter, animation, frame, region, asset, event, updater, setting or saved data is
+added. Hidden/off retirement remains shared. CI-only source mocks were authored
+but not run locally; live Hakkar metadata and rendering remain unverified.
+
+## Meter processing and display caches
+
+The meter and Pet frames fully hide during native `choosing` at their existing
+one-second and tenth-second phase reads. Choice hiding retains meter sessions,
+checkpoints, legacy recent samples, native rate caches and pet rosters; it is a
+presentation exception to ordinary hidden-window rate retirement. It skips
+meter snapshots and pet roster/timer reads, icon binding, metrics and painting
+while cards remain open. Existing OnShow handlers reject premature reappearance;
+normal visibility returns through Layout and the retained pools on the next
+eligible reader pass. Ordinary hide/off/world/reset cleanup remains separate.
+Both Performance Mode states use actual Hide/Show without a fade. No frame,
+region, asset, setting, SavedVariable, event, updater or faster reader is added.
+The authored CI-only cases do not establish live overlay rendering or latency;
+local tests and addon/game execution were not run.
+
+The existing meter controller reads regular native and legacy data once per
+second, including counters, shares, bars, attribution and displayed rates.
+Input, settings, scrolling, Reset and showing the meter prime that same reader
+for the next frame; no extra idle updater is added. This one-second meter policy
+supersedes its earlier five-Hz consumer cadence, including legacy rolling
+observations, without changing native publication/history-resolution timing.
+One validated native context is shared within
+each refresh; manual Reset obtains its own fresh context. A previously accepted
+view can be reused when the complete forwarded capture identity, clock and
+query still match. Clock-only captures remain eligible for fresh native rate
+reads when the rate sample is due; counter revision alone never proves a recent
+rate is unchanged.
+
+For visible Damage Done with a positive DPS window, the logical selected window
+stays unchanged while physical native queries request that window only at the
+shared one-second cadence. Extra triggered reads within a rate sample can request
+`windowSeconds = 0` and still accept complete official snapshots for totals,
+shares, source identities and attribution. Their All averages never replace
+cached recent DPS. The viewport retains only its accepted native recent and
+average rates, plus the native header rate/status and capture clock; the addon
+does not calculate a replacement recent rate from counters or wall time.
+Hidden and inactive views retire these sampled rates without releasing the
+shared Reset checkpoint.
+
+Rate identities survive amount/order updates but change with source, actor,
+member, positive-origin or family membership changes. A newly visible or
+replaced identity without its own sample requests one fresh positive-window
+capture in the same reader pass. Known viewport misses request recent rates
+directly. If a counter capture reveals an unexpected identity/group change,
+one additional recent snapshot replaces that capture's data for the pass.
+Reset, context retirement and native-clock
+regression also require fresh native rates. Native warmup or unavailable
+history remains unavailable until the next accepted rate capture. All, Healing
+Done, Boss Damage and Party Damage keep their zero-window queries. Retry and
+accepted-capture state distinguish physical query windows, preserving native
+error delays and consumer checkpoint fences. Both Performance Mode states use
+the same policy, with no new updater, setting or persistence.
+
+Each native row keeps its own identity and copied metadata/member fingerprints.
+Counter updates reuse prepared names, artwork, actor keys and family mappings.
+New sources, member or positive-attribution changes, affected source/actor/origin
+metadata and lifecycle transitions rebuild the affected preparation. A global
+metadata update for a new summon does not by itself require reconstructing
+unchanged historical captions and keys. Amounts and rates still come from the
+accepted native snapshot, and numeric ordering changes still reorder summaries.
+Rate-only passes retain the existing sorted output order.
+
+The contribution index stores IDs and array positions instead of complete leaf
+statistic tables. Appended records extend it; reordered, missing or shortened
+input triggers a safe reindex. Member fingerprints include zero-to-positive
+changes after Reset, so old history cannot supply a different current talent or
+item origin. Source identities and families retire with their existing view and
+run owners. There are still at most four native view caches; their size follows
+the native ledger rather than the number of visible bars.
+
+The meter controller copies and samples only its visible viewport, retaining the
+complete source ordering for scrolling, ranks, shares and the leading bar.
+Displayed-rate caches retire offscreen identities instead of retaining every
+source visited during a run. Newly revealed rows initialize their own rates;
+unchanged visible identities retain the one-second cadence. Legacy clients keep
+their complete one-Hz regular rolling observations, reset baselines and publication
+gates, with rate validation retained at their native/grouping boundaries.
+
+Visible rows also gate the full work for each drawing piece. A settled
+layout skips text/width/scale reads and numeric metric lookup. Its inputs include
+the final displayed numeric caption, dimensions, icon options, font sizes,
+global font/outline choices, actual numeric font and effective scale. Rows share
+one root-scale sample; each visible numeric label retains an actual-font check
+so unannounced native font changes still invalidate layout. Invalid metrics and
+failed font assignments keep the layout retryable. Name/caster and option changes
+continue updating the affected piece.
+
+A successfully bound static native icon skips its helper while path and scale
+match. Failed bindings retry, and another binding path invalidates that cache.
+Retained native portrait-image checks and regular legacy resolver checks remain.
+Bar fractions recompute only when the row amount or leading amount changes.
+Non-Party colors reuse the common class color and check proc classification;
+Party class-palette validation continues through the regular reader. Pool
+retirement clears settled presentation state, while hovered tooltips retain
+their source/value and native ownership checks. The one-second data-reader
+cadence is unchanged.
+
+Both Performance Mode states use these same caches. No frame, drawing region,
+asset, setting, saved data, event, updater or runtime diagnostic hook is added.
+Fresh snapshots still require full native row validation and numeric processing;
+the native API still returns its complete ledger. Regular complete-snapshot
+reads fall from five to one per second; triggered reads remain available for
+immediate user feedback. Native-history caches also avoid repeated positive-window
+queries on extra reads within a second. Full snapshot materialization is still
+required. Query counts do not measure the native
+snapshot producer's cost or FPS. CI-only operation-count and lifecycle cases
+cover growing ledgers, cache invalidation, viewport work, native history cadence
+and early row-piece gates. No local tests, game execution, late-run frame timings
+or FPS measurements were performed.
+
+## Meter talent proc captions
+
+Talent proc captions reuse the same snapshot member caches and pooled rows.
+Only changed attribution or relevant metadata rejoins positive row members to
+one actual talent origin; rate-only passes reuse accepted display metadata. This adds
+no native read, current-build scan, history, animation, frame, region, asset,
+event, updater, setting or saved data. Names and icon readiness follow the
+existing metadata/language revisions and changed-only bindings. Native source
+identities, counters, checkpoints and one-Hz rates remain unchanged. Normal and
+Performance Mode both update instantly; hidden/off work stays deferred. CI-only
+mock cases were authored but not run locally, with no native rendering or FPS
+claim.
+
+## Meter pet attribution and summaries
+
+Damage Done and Boss Damage request native actor/source rows through their
+existing snapshot read. Recorded actor names distinguish pet spells without
+current-pet scans or name-based attribution. An explicit native summon/totem key
+groups matching kinds for one owner across incarnations; otherwise the actor
+identity stays separate. Native spell-rank grouping retains that caster scope.
+
+The default-off `meterGroupPets` choice in the existing display table combines
+pet spell rows through the same pooled presentation copies. Actual choice
+changes invalidate only view/rate presentation; native counters, windows and
+checkpoint fences stay untouched. Grouped rows reuse the existing retained
+portrait binder, circular texture and rim; no frame, region, asset, event,
+updater or SavedVariable is added. One normalized boolean setting and two
+fourteen-language UI captions are added. Hidden/off reads retain their existing
+gates and both Performance Mode states show the same instant result. CI-only
+mocks cover attribution, reuse and shared preview/save/discard/profile/reset;
+no local tests, game execution, drawing or FPS measurements were performed.
 
 ## Mandatory rule for all drawing and assets
 
@@ -925,7 +1075,7 @@ lower authored animation cadence or replace native gameplay time.
 
 | Path                        | Before this pass                                                                                       | After this pass                                                                                                                                                                                                                                                                                                                                   |
 | --------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Minimap local clock         | A visible frame callback and one date read every five seconds                                          | **Off by default**, with no clock callback or date reads. `/sdui` → Minimap → **Show clock** enables the original five-second reader only while visible. Off centers the existing zone button/text in the top panel; on restores its original left position beside the clock.                                                                     |
+| Minimap local clock         | A visible frame callback and one time read every five seconds                                          | **On by default**, using the existing five-second native-local-time reader, or its older-build date fallback, only while visible. `/sdui` → Minimap → **Show clock** off detaches the clock callback and stops time reads. Off centers the existing zone button/text in the top panel; on restores its original left position beside the clock.   |
 | SCT origin retirement       | Walk the complete live/recent catalog every frame                                                      | Skip that walk until the earliest real retirement is strictly older than the original 0.65 seconds, then stable-compact and retain the next deadline. Shown-plate sampling, matching, every original hit and active text motion retain frame cadence.                                                                                             |
 | Nameplate raid-icon copying | Two native source texture reads per refresh and two UV reads when copying                              | One texture and one UV sample, retaining four/eight-coordinate forms, actual destination comparisons and retry.                                                                                                                                                                                                                                   |
 | Final cooldown numbers      | All seven buttons reread every frame when any is in the positive final 200 ms                          | Only the **m** already-finishing buttons receive intervening frame reads. All seven retain an independent ten-Hz full pass and immediate cooldown/slot events. Store only final-window flags, never a private completion clock or cached native timing.                                                                                           |
@@ -942,13 +1092,27 @@ lower authored animation cadence or replace native gameplay time.
 | Stored levels               | Out-of-world callback kept reaching the ten-Hz guard/update                                            | Detach on world leave/logout and rearm on entry; live ten-Hz native state and frame pulse remain.                                                                                                                                                                                                                                                 |
 | Resources                   | Two player-visibility samples per native pass                                                          | One synchronous sample shared by data-read eligibility and presentation. Native events/ten-Hz fallback remain.                                                                                                                                                                                                                                    |
 
-The minimap choice is normalized as default-false `minimapShowClock` in the
+The minimap choice is normalized as default-true `minimapShowClock` in the
 existing display table. Preview, Confirm-only saving, Cancel/world/logout/reload
-discard, profiles and both full resets use the shared display lifecycle. No new
+discard, profiles and both full resets use the shared display lifecycle. Missing
+or invalid choices and resets select on; explicit saved off choices stay off. No new
 SavedVariable, gameplay clock, drawing region or asset is added. The caption and
 hint have all fourteen source/runtime translations. Hiding or disabling the
 clock clears only its owned hover and detaches its worker; Show with the option
 on takes a fresh local-time sample.
+
+The same worker consumes a validated `AZS_GetLocalTime()` snapshot when present,
+retaining only its latest hour/minute pair and formatted 24-hour caption.
+Available-but-invalid native results hide the custom text and release native
+ownership; they never trigger a separate date reading. The shared HUD owner
+suppresses only a recognized `localClock` part after usable text/font, or
+explicitly suppresses it for Off, and restores captured/latest external choices
+on failure or world/logout/reload cleanup. Failed handoffs hide the custom text
+until the visible worker retries. Tooltip updates reuse the same caption and
+respect foreign owners. The existing frame receives CVar/world events, with no
+new frame, region, asset, setting, SavedVariable or independent idle updater.
+Both Performance Mode states stay static. Native provider availability and
+in-game handoff remain unverified; source and CI-only mocks are not live proof.
 
 Combat/rest event evidence comes from public benilla
 [`field_watch.rs` at cdebda36](https://github.com/samwhosung/benilla/blob/cdebda36fb4c611ad0a8c35ddc45bf53e4ff1c60/crates/benilla-app/src/field_watch.rs#L808-L822)
@@ -980,8 +1144,8 @@ performance.
   banner fades remain capped at thirty Hz. Warning gradients and the resting
   flipbook remain twenty Hz only while active.
 - Resources, pets, normal cooldowns, guardian tracker and encounter fallback reads
-  remain ten Hz. Meter, jewelry metadata, loot service, banner readiness and
-  tooltip styling remain five Hz; meter rates stay one Hz. Required phase,
+  remain ten Hz. Meter reads and rates use one-Hz regular updates; jewelry
+  metadata, loot service, banner readiness and tooltip styling remain five Hz. Required phase,
   publication, native ownership and failed-read readiness work is retained.
 - Jewelry cursor placement runs only for a visible hovered card. Its exact
   fourteen-strip icons, original rims and five-distinct-icon cost remain;
@@ -1017,9 +1181,9 @@ load, and native events can request additional refreshes.
 | Language discovery        | Successful discovery detaches its callback; existing world/zone events restart the original five-Hz readiness retry, and leave/logout detaches.                                                                                                                                                                                                    |
 | Cooldown numbers          | Disabled, hidden and out-of-world states detach the existing callback. Show, display and world/native cooldown events rearm it. Enabled native timing retries remain at ten Hz, and the required final-200-ms seven-button frame sampling is unchanged.                                                                                            |
 | Tooltip and target colors | Compare actual native colors before writing, after resolving the owning friendly/enemy target rule. Missing tooltip color getters keep the original write fallback. Native resets and failed assignments remain repairable. Hiding an already-hidden tooltip health bar skips the extra Hide.                                                      |
-| Minimap clock             | Accumulated frame elapsed replaces a native GetTime call each frame. The existing five-second date check remains; Hide detaches and Show samples immediately. Unchanged minutes still skip text writes.                                                                                                                                            |
+| Minimap clock             | Accumulated frame elapsed replaces a native GetTime call each frame. The existing five-second local-clock sample remains, preferring the native getter and retaining date only on older builds; Hide detaches and Show samples immediately. Unchanged minutes still skip text writes.                                                              |
 | Native aura layout        | Native enchant callbacks still repair actual BuffFrame/enchant anchors each time. Icon-slot traversal/reflow is dirty-driven by Show/Hide, received timer visibility, forced native positioning and editing. Forced geometry/font repair and hidden editor bounds remain.                                                                          |
-| Received aura countdowns  | Cache each displayed ceil-rounded duration string, retain actual-text comparisons and failed-setter retries, and Show timer buttons only on transitions. Ten-Hz native timing and hovered decimal-duration tooltip updates remain.                                                                                                                 |
+| Received aura timers      | API timer icons have no countdown region or formatting and stay bright. Show timer buttons only on transitions. Ten-Hz native timing and hovered decimal-duration tooltip updates remain; regular native aura captions and expiration are unchanged.                                                                                               |
 | Pet/summon/totem captions | Existing rows retain only their latest rounded countdown/count strings. Repeated tenth-second samples skip formatting/concatenation; hidden/missing/zero values and retirement remain distinct. Native feed validation, timing getters, roster counts and metadata/icon retries remain.                                                            |
 | Run length and schedule   | Reuse duration/schedule validation within the existing ten-Hz/deferred-publication scope; phase changes, schedule/run boundaries and reload force fresh acceptance. Raw native run time, phase/rollback checks and native clock ownership retain frame cadence. Native two-second fill progress and authored decoration remain.                    |
 | Boss debuffs              | Remove per-frame getter/list/format traversal between normal refreshes. Existing ten-Hz/deferred-publication updates read current native remaining values; hovering performs a fresh native phase/effect read before opening and reflows changed height immediately. No countdown is extrapolated.                                                 |
@@ -1053,7 +1217,7 @@ has an active visual, native-data, ownership or readiness purpose:
 | Jewelry                                            | Five-Hz native equipment/cooldown and metadata readiness; active exact 64-cell cooldown painting at thirty Hz, cursor placement only while hovered. Fourteen-strip icon sampling and original rims remain.                                                                                                           |
 | Loot                                               | Five-Hz service/readiness/native ownership and bounded queue delivery, populated frame fades/expiry, bounded five-Hz metadata retry. Hidden cards must expire and free capacity; empty cosmetic pools already detach.                                                                                                |
 | Banners                                            | Five-Hz registration/ownership/readiness, next-frame pending native errors and original thirty-Hz fade/expiry/promotion. Settled disabled/faulted cleanup already detaches.                                                                                                                                          |
-| Damage meter                                       | Five-Hz native publication/readiness/ownership and one-Hz rate presentation. Off detaches; hidden views skip rows/rates/icon work. Accepted counter processing already has publication caches.                                                                                                                       |
+| Damage meter                                       | One-Hz regular native/legacy reads, readiness/ownership and rates; user actions prime next-frame reads. Off detaches; hidden views skip rows/rates/icon work. Accepted counter processing already has publication caches.                                                                                            |
 | Chat/tooltip/character                             | Visible chat slides/reveals and cursor tooltip placement need frames; chat geometry repair stays one Hz and tooltip styling five Hz. Character stats already coalesce to a next-frame flush only after relevant events while open. Capture/Copy remain opt-in/event/user driven.                                     |
 | Editing and diagnostics                            | Active Layout/minimap-launcher drag stays per frame with final sample. Settled editor/coordinates remain ten Hz; fstack stays five Hz only while explicitly enabled.                                                                                                                                                 |
 | Other modules/native work                          | Menu, font resolution, display/profile controls, static catalogs and bootstrap are event/initialization driven. Omitted cast/bag/micro frames remain suppressed. Native action swipes/usability, model animation, incoming combat text and range fade-manager animation retain their engine schedules.               |
@@ -1774,8 +1938,9 @@ coverage checks enable/disable, failed cleanup retries and dispatch failure.
 The visible meter distinguishes accepted counter publications from changing
 native rates. Getter identity, returned source, native stamp, total and a
 monotonic receipt generation invalidate counter validation/copying, including
-same-table/same-stamp deliveries. Official getters and five-Hz native-time
-observations remain active; one-Hz row/header rate updates remain independent.
+same-table/same-stamp deliveries. Official getters and native-time observations
+use the shared one-Hz regular controller, with user-triggered next-frame reads.
+Row/header rate samples retain their one-Hz presentation cadence.
 Session comparison and immutable name/order/class/share copying skip settled
 publications. The bounded rolling ring still samples cached counters, preserving
 pauses, interpolation, warmup, gaps and regressions. Reset, language/off/world
@@ -2215,10 +2380,18 @@ remain in place; this is not a claim that every remaining cost is eliminated.
 | Minimap and waypoint guides                             | `modules/map/map.lua`, `buttons.lua`, `navigation.lua`, `waypoints.lua`: reusable accepted snapshots/pins and native direction/position sampling; skip unchanged clock labels and button anchors. The gold glyph and selected static square background use two bound-once textures: one added persistent background region/UV clamp and normal alpha overlap beneath the glyph, with no idle polling or extra hover region. Both inherit hiding/scale and stay static in Performance Mode; the pointer updater exists only while dragging. Square-edge adaptation runs on foreign placement calls or map/show/load events. See `MINIMAP-BUTTONS.md`. |
 | SCT and nameplates                                      | `modules/nameplates/sct.lua`, `style.lua`: event-batch discovery plus independent frame discovery, preserved matching/animation, cached metadata and unchanged native styling.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Layout/editor, tooltips, chat, Copy, menu and inspector | `core/layout.lua`, `editor.lua`, `tooltips.lua`, `fstack.lua`, `modules/chat/*`, `modules/menu/menu.lua`: bounded edit sampling, passive/pool reuse, owner/scale-aware hover work, native chat/fades, retained opt-in diagnostics and hidden inspector shutdown.                                                                                                                                                                                                                                                                                                                                                                                     |
-| Meter and general warning overlay                       | `modules/ui/meter.lua`, `modules/ui/ui.lua`: native circles, one-Hz rate display with five-Hz data observation, visibility/change guards, transition-only warning visibility and preserved gradient animation.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Meter and general warning overlay                       | `modules/ui/meter.lua`, `modules/ui/ui.lua`: native circles, one-Hz regular meter reads/rates and next-frame input refreshes, visibility/change guards, transition-only warning visibility and preserved gradient animation.                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Native aura/timer rows (`modules/unit/auras.lua`) retain changed-slot reflow,
 hidden timer shutdown and required repair of native buff/enchant anchors.
+The presentation applies only to `AZS_GetTimers()` talent/jewelry
+icons: they stay bright with no fade/dimming or text underneath, at any remaining
+value. Their countdown FontString and formatting work are removed. The API timer
+group keeps received order at the chosen left/right anchor, without ready/waiting
+reflow. Remaining/full-wait/Ready tooltips and native timing stay current through
+the existing reader. Regular native aura duration captions, opacity, expiration,
+indices, counts, input and tooltips are unchanged. Both Performance Mode states
+share these paths, with no new reader, frame, region, event or updater.
 Damage-loss artwork (`modules/unit/cut.lua`) installs its animation callback
 only for active fades and removes it when the fading pool is empty. These
 native repair and authored fade paths must not be removed as idle work.
@@ -2264,8 +2437,8 @@ allocated for reuse, with no visible drawing cost. Live enable/disable, profiles
 Confirm/Cancel/discard and both resets share the existing display lifecycle.
 
 Damage Done now derives rolling DPS from native cumulative snapshots and run
-seconds, defaulting to ten seconds. The existing five-Hz reader observes complete
-sources even on another visible meter tab; no event, frame or updater is added.
+seconds, defaulting to ten seconds. The shared one-Hz regular reader observes
+complete sources even on another visible meter tab; no event, frame or updater is added.
 `core/meter_rates.lua` caps each header/source series at 604 timestamp/value pairs,
 retains at most 120 run seconds plus one boundary sample, and compresses flat
 intervals to their endpoints. Source identities remain exact name/proc pairs;
@@ -2310,18 +2483,22 @@ region, animation, asset, event, updater, setting or SavedVariable is added;
 normal and Performance Mode share the same behavior. CI-only fixtures cover
 the navigation, lifecycle and waypoint changes; they were not run locally.
 
-Hiding empties recent vectors once and stops observation; showing warms the
+Ordinary Layout/UI hiding empties recent vectors once and stops observation; showing warms the
 window again. Disabling and run/world retirement drop all rate state; language
 changes rebase an active reset session. Repeated retirement of an empty model allocates nothing. Pause leaves the
 native time coordinate unchanged. Window choices reuse normalized display drafts,
 profiles and resets. The window row reuses existing editor controls. The old
 rate-only Reset DPS settings action is removed. The header arrow FontString is
-replaced by one native button using three already-bundled Close.blp states:
-normal, pressed and additive hover. One image draws normally, with a second only
+replaced by one native button using the bundled Blizzard refresh glyph in
+`meter/Reset.blp`, with normal, dimmed pressed and additive hover states.
+One image draws normally, with a second only
 on hover; native button state handling needs no Lua updater or cosmetic polling.
-The texture is bound once, retains its source proportions and inherits meter
-scale/hiding. This adds one normal HUD texture region and removes one label,
-without adding an image file or saved state. Rate text/tooltips still skip
+The 16-unit square glyph is centered within the existing button bounds, bound
+once and inherits meter scale/hiding. It stays static in both Performance Mode
+states. Replacing the X adds one 16-by-16 runtime BLP and no frame or texture
+region; the authoring TGA stays outside the runtime manifest. The button itself
+adds one normal HUD texture region in place of the old label, without saved
+state. Rate text/tooltips still skip
 unchanged writes; reset clears rows/icons/hovers and both rate caches immediately.
 These bounds are source-level cost evidence; CPU time, gameplay behavior and FPS
 remain unmeasured. See [DAMAGE-METER.md](DAMAGE-METER.md).
@@ -2364,7 +2541,7 @@ The audit found and corrected local meter gaps:
   but hidden rows skip formatting, tooltip repaint, icon lookup/binding and bar
   painting. Visibility requests occur only on transitions; clearing is idempotent.
 - A hovered tooltip reuses unchanged source/value/mode/language/scale content.
-  It no longer clears, reparents and rebuilds the same lines every five-Hz poll,
+  It no longer clears, reparents and rebuilds the same lines on every poll,
   or steals a tooltip that another native owner has taken or hidden.
 - Row labels/numbers avoid unchanged formatting; bar, color and icon bindings
   retain their existing guards. Native circle failures are remembered like the
@@ -2619,6 +2796,13 @@ Holders inherit the owner's movement, scale and visibility; animation anchors
 remain local without per-frame owner geometry reads. Layout scaling refits only
 active, visible labels through `onResize`. Holder parent changes occur only on
 pool acquisition across styles, restoring the original parent for enemy text.
+The world owner, scrolling owner and pooled holders use one `LOW` strata
+constant. Their visual children inherit it, keeping all styles beneath ordinary
+panels such as Character while combat text continues above the world. Existing
+construction binds the layer once; panel visibility adds no hooks, polling,
+region, animation, asset or repeated layer writes. Both Performance Mode states
+retain their normal motion, expiry, intake and pooling. CI-only mocks cover
+relative native strata and pooled reuse, not actual panel occlusion in-game.
 Default coordinates, curve, spacing and cadence remain unchanged. Layout hiding
 retires active/queued hits and skips hidden intake, resolver work and animation;
 unhiding admits only new hits. The cached visibility policy uses the existing

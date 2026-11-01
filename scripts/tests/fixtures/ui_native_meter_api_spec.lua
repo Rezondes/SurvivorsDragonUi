@@ -66,6 +66,85 @@ local function Ranks(count)
     return records
 end
 
+local function ItemRanks(count)
+    local records = {}
+    for rank = count, 1, -1 do
+        table.insert(records, {
+            id = "hakkar-rank-" .. rank,
+            rowId = "hakkar-leaf-" .. rank,
+            kind = "item",
+            omitAbilityKey = true,
+            itemKey = "eye_of_hakkar",
+            itemInstanceKey = "hakkar-copy-one",
+            itemId = 9000 + rank,
+            rank = rank,
+            name = "The Eye of Hakkar " .. rank,
+            amount = rank * 10,
+            recent = rank * 2,
+            after = rank * 3,
+        })
+    end
+    return records
+end
+
+local function ItemEffects(count)
+    local records, origins = ItemRanks(count), {}
+    for _, record in ipairs(records) do
+        local origin = Copy(record)
+        origin.sourceKey = origin.id
+        origins[origin.sourceKey] = origin
+        record.id = "hakkar-pulse-rank-" .. record.rank
+        record.kind, record.abilityKey, record.omitAbilityKey = "effect", "hakkar-pulse", nil
+        record.origins = { origin.sourceKey }
+        record.itemKey, record.itemInstanceKey, record.itemId, record.rank = nil, nil, nil, nil
+    end
+    return records, origins
+end
+
+local function Talents()
+    local records = {
+        { id = "pyroblast-normal", rowId = "pyroblast-normal", name = "Pyroblast", amount = 9400 },
+        { id = "pyroblast-proc", rowId = "pyroblast-proc", name = "Pyroblast", amount = 4900, origin = "hot-streak" },
+        { id = "holy-nova-proc", rowId = "holy-nova-proc", name = "FX Holy nova", amount = 2900, origin = "chastise" },
+        { id = "fire-nova-proc", rowId = "fire-nova-proc", name = "Fire Nova", amount = 1900, origin = "shaman-proc" },
+    }
+    local origins = {
+        ["hot-streak"] = { name = "Hot Streak", talentKey = "hot_streak", art = "hot-streak-talent" },
+        chastise = { name = "Chastise", talentKey = "chastise", art = "chastise-talent" },
+        ["shaman-proc"] = { name = "Received shaman talent", talentKey = "native_shaman_talent", art = "shaman-talent" },
+    }
+    for _, record in ipairs(records) do
+        record.abilityKey = string.find(record.id, "pyroblast", 1, true) and "pyroblast" or record.id
+        record.rank, record.recent, record.after = 1, record.amount / 5, record.amount / 10
+        record.proc, record.origins = record.origin ~= nil, record.origin and { record.origin } or {}
+    end
+    for key, origin in pairs(origins) do
+        origin.sourceKey, origin.kind, origin.attribution = key, "talent", "known"
+        origin.nameLanguageCode, origin.spellIds, origin.originSourceKeys, origin.relatedSourceKeys = "en", {}, {}, {}
+        origin.icon = { status = "ready", path = "Interface\\Icons\\" .. origin.art }
+        origin.art = nil
+    end
+    return records, origins
+end
+
+local function Pets()
+    local records = {
+        { id = "shadowbolt", rowId = "hero-bolt", name = "Shadowbolt", amount = 100, recent = 50, after = 10 },
+        { id = "shadowbolt", rowId = "imp-one-bolt", name = "Shadowbolt", amount = 40, recent = 20, after = 4 },
+        { id = "shadowbolt", rowId = "imp-two-bolt", name = "Shadowbolt", amount = 20, recent = 10, after = 2 },
+        { id = "hellfire", rowId = "imp-one-fire", name = "Hellfire", amount = 60, recent = 30, after = 6 },
+    }
+    for index, record in ipairs(records) do
+        record.abilityKey, record.rank = record.id, 1
+        if index > 1 then
+            record.actorId = index == 3 and "imp-2" or "imp-1"
+            record.actorKind, record.actorName, record.summonKey = "summon", "Imp", "imp"
+            record.actorPortrait = { portraitKey = "portrait-" .. record.actorId, status = "ready" }
+        end
+    end
+    return records
+end
+
 local function Native()
     local c = H.New()
     local env = c.env
@@ -222,14 +301,17 @@ local function Native()
             if actor ~= owner then
                 response.actors[actor] = {
                     actorId = actor,
-                    kind = "pet",
-                    name = "Hunter pet",
+                    kind = record.actorKind or "pet",
+                    name = record.actorName or "Hunter pet",
                     nameLanguageCode = self.context.languageCode,
-                    state = "despawned",
+                    state = record.actorState or "despawned",
                     parentActorId = owner,
                     currentOwnerId = owner,
-                    petFamilyKey = "wolf",
-                    portrait = { portraitKey = "portrait-" .. actor, status = "missing", reason = "not_available" },
+                    petFamilyKey = record.petFamilyKey or "wolf",
+                    summonKey = record.summonKey,
+                    totemKey = record.totemKey,
+                    portrait = record.actorPortrait
+                        or { portraitKey = "portrait-" .. actor, status = "missing", reason = "not_available" },
                 }
             end
             response.sources[record.id] = {
@@ -239,7 +321,7 @@ local function Native()
                 nameLanguageCode = self.context.languageCode,
                 icon = record.icon or { status = "ready", path = "Interface\\Icons\\" .. record.id },
                 spellIds = {},
-                originSourceKeys = {},
+                originSourceKeys = Copy(record.definitionOrigins or {}),
                 relatedSourceKeys = {},
                 abilityKey = not record.omitAbilityKey and (record.abilityKey or record.id) or nil,
                 rank = record.rank,
@@ -258,14 +340,15 @@ local function Native()
             if query.metric == "healing" then
                 leaf.recipientActorId, leaf.recipientOwnerState, leaf.recipientOwnerId = owner, "known", owner
             end
-            leaf.originSourceKeys, leaf.tieOrder = {}, index
+            leaf.originSourceKeys, leaf.tieOrder = Copy(record.origins or {}), index
             local row = Stats(query, record.amount, record.recent, record.after, record.recentStatus)
             row.rowId, row.memberIds, row.rank = "group-" .. record.rowId, { record.rowId }, index
+            row.actorId = actor
             row.ownerId, row.sourceKey, row.nativeProc, row.tieOrder = owner, record.id, leaf.nativeProc, index
             row.procClassification = leaf.nativeProc and "proc" or "non_proc"
             if query.groupBy == "owner" then
                 row.rowId, row.actorId, row.sourceKey, row.nativeProc = "owner-" .. owner, nil, nil, nil
-            else
+            elseif query.groupBy ~= "actor_source" then
                 row.actorId = nil
             end
             amount, recent, after = amount + record.amount, recent + record.recent, after + (record.after or 0)
@@ -274,6 +357,9 @@ local function Native()
                 table.insert(response.rows, row)
                 response.maxRowAmount = math.max(response.maxRowAmount, row.displayAmount)
             end
+        end
+        for key, descriptor in pairs(self.extraSources or {}) do
+            response.sources[key] = Copy(descriptor)
         end
         response.totals = Stats(query, amount, recent, after)
         for _, leaf in ipairs(response.contributions) do
@@ -342,7 +428,17 @@ local function Native()
     return c, state, env.T.NewNativeMeter(), env
 end
 
-if helperMode == "helpers" then return { New = Native, languages = languages, labels = labels, Ranks = Ranks } end
+if helperMode == "helpers" then
+    return {
+        New = Native,
+        languages = languages,
+        labels = labels,
+        Ranks = Ranks,
+        ItemRanks = ItemRanks,
+        Pets = Pets,
+        Talents = Talents,
+    }
+end
 
 Test("missing native endpoints retain the legacy selection boundary", function()
     local c = H.New()
@@ -732,4 +828,871 @@ Test("rank grouping uses native checkpoint deltas across language and later upgr
     source = assert(meter.Read(damage, 0))
     assert(source[1].dmg == 30 and source[1].dps == 15 and source[1].rowId == identity)
     assert(state.queries[table.getn(state.queries)].checkpointId == checkpoint, "rank change replaced the native fence")
+end)
+
+Test("item ranks combine native item IDs using the explicit family in all source views", function()
+    for _, view in ipairs({ damage, healing, boss }) do
+        local _, state, meter = Native()
+        state.records = ItemRanks(9)
+        local source, total, _, message = meter.Read(view, 10)
+        assert(source and not message and table.getn(source) == 1, "item ranks remained separate rows")
+        assert(source[1].dmg == 450 and source[1].dps == 9 and source[1].share == 1 and total == 450)
+        assert(source[1].name == "The Eye of Hakkar 9" and source[1].icon == "Interface\\Icons\\hakkar-rank-9")
+        assert(table.getn(state.lastResponse.rows) == 9 and state.lastResponse.sources["hakkar-rank-1"].itemId == 9001)
+        local identity = source[1].rowId
+        state.records = ItemRanks(10)
+        state.context.counterRevision = "item-rank-ten"
+        source = assert(meter.Read(view, 10))
+        assert(source[1].dmg == 550 and source[1].rowId == identity and source[1].name == "The Eye of Hakkar 10")
+    end
+end)
+
+Test("item rank families preserve copies, components, owners and unknown identities", function()
+    local distinctions = {
+        { "itemKey", "eye_of_hakkar", "another_item" },
+        { "itemInstanceKey", "copy-one", "copy-two" },
+        { "variantKey", "direct", "periodic" },
+        { "talentKey", "talent-one", "talent-two" },
+        { "proc", false, true },
+        { "rank" },
+        { "itemKey" },
+        { "itemId", 0, 9001 },
+        { "kind", "item", "generic" },
+    }
+    for _, distinction in ipairs(distinctions) do
+        local _, state, meter = Native()
+        state.records = ItemRanks(2)
+        state.records[1][distinction[1]], state.records[2][distinction[1]] = distinction[2], distinction[3]
+        local source = assert(meter.Read(damage, 10))
+        assert(table.getn(source) == 2, "item grouping discarded " .. distinction[1] .. " distinction")
+    end
+    local _, state, meter = Native()
+    state.records = ItemRanks(2)
+    state.records[2].ownerId = "hero-2"
+    local source = assert(meter.Read({ metric = "damage", scope = "party", period = "run", groupBy = "source" }, 10))
+    assert(table.getn(source) == 2, "item grouping merged different credited owners")
+    state.records = ItemRanks(3)
+    state.records[2].rank, state.records[3].rank = 1, 1
+    state.context.counterRevision = "ambiguous-item-rank"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 3, "same-rank item ambiguity partially merged a family")
+end)
+
+Test("item-triggered effects use actual single-item origins and retain separate components", function()
+    local _, state, meter = Native()
+    state.records, state.extraSources = ItemEffects(3)
+    local source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1 and source[1].dmg == 60 and source[1].name == "The Eye of Hakkar 3")
+    assert(source[1].icon == "Interface\\Icons\\hakkar-pulse-rank-3")
+    state.records[3].abilityKey = "hakkar-other-component"
+    state.context.metadataRevision = "separate-item-components"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2, "independent item effects merged by their parent item")
+    for _, record in ipairs(state.records) do
+        record.abilityKey, record.variantKey, record.omitAbilityKey = nil, "hakkar-pulse", true
+    end
+    state.context.metadataRevision = "explicit-variant-component"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1, "explicit effect component identity was ignored")
+    for _, record in ipairs(state.records) do
+        record.variantKey = nil
+    end
+    state.context.metadataRevision = "missing-item-component"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 3, "missing component identity merged unrelated item effects")
+end)
+
+Test("item origins never come from definition links, missing members or mixed positive contributions", function()
+    local mutations = {
+        function(snapshot) snapshot.contributions[1].originSourceKeys = { "missing-item" } end,
+        function(snapshot) snapshot.rows[1].memberIds = { "missing-member" } end,
+        function(snapshot) snapshot.contributions[1].originSourceKeys = { "hakkar-rank-3", "hakkar-rank-2" } end,
+        function(snapshot) snapshot.sources["hakkar-rank-3"].itemInstanceKey = "other-copy" end,
+        function(snapshot) snapshot.sources["hakkar-rank-3"].rank = nil end,
+        function(snapshot)
+            for _, leaf in ipairs(snapshot.contributions) do
+                leaf.originSourceKeys = {}
+            end
+        end,
+    }
+    for _, mutate in ipairs(mutations) do
+        local _, state, meter = Native()
+        state.records, state.extraSources = ItemEffects(3)
+        for _, record in ipairs(state.records) do
+            record.definitionOrigins = Copy(record.origins)
+        end
+        state.mutate = mutate
+        local source = assert(meter.Read(damage, 10))
+        assert(table.getn(source) > 1, "uncertain item origin was inferred from source metadata or names")
+    end
+    local _, state, meter = Native()
+    state.records, state.extraSources = ItemEffects(2)
+    state.mutate = function(snapshot)
+        local leaf = Copy(snapshot.contributions[1])
+        leaf.rowId, leaf.displayAmount, leaf.originSourceKeys = "retired-origin", 0, { "missing-item" }
+        table.insert(snapshot.contributions, leaf)
+        table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+    end
+    local source = assert(meter.Read(damage, 10))
+    assert(
+        table.getn(source) == 1 and source[1].dmg == 30,
+        "zero checkpoint contribution changed current item attribution"
+    )
+    state.mutate = function(snapshot)
+        local leaf = Copy(snapshot.contributions[1])
+        leaf.rowId, leaf.originSourceKeys = "mixed-origin", { "hakkar-rank-1" }
+        table.insert(snapshot.contributions, leaf)
+        table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+    end
+    state.context.counterRevision = "mixed-positive-origins"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2, "one source row with mixed actual item ranks entered a guessed family")
+end)
+
+Test("explicit item-bound abilities retain native resets, missing rates and artwork readiness", function()
+    local _, state, meter = Native()
+    state.records = ItemRanks(3)
+    for _, record in ipairs(state.records) do
+        record.kind, record.abilityKey, record.omitAbilityKey = "ability", "hakkar-pulse", nil
+    end
+    local source = assert(meter.Read(damage, 0))
+    assert(table.getn(source) == 1 and source[1].dmg == 60)
+    assert(meter.Reset())
+    state.context.asOfRunSeconds = 22
+    source = assert(meter.Read(damage, 0))
+    assert(source[1].dmg == 18 and source[1].dps == 9)
+    local checkpoint = state.queries[table.getn(state.queries)].checkpointId
+    state.records[1].recentStatus = "unavailable"
+    state.records[1].icon = { status = "pending", retryAfterSeconds = 0.2 }
+    state.context.metadataRevision = "item-pending"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].dps == nil and source[1].icon == nil and source[1].iconStatus == "pending")
+    state.records[1].icon = { status = "ready", path = "Interface\\Icons\\current-item-rank" }
+    state.context.metadataRevision = "item-ready"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].icon == "Interface\\Icons\\current-item-rank")
+    assert(
+        state.queries[table.getn(state.queries)].checkpointId == checkpoint,
+        "item presentation replaced Reset fence"
+    )
+end)
+
+Test("unresolved item origins cannot fall back to ordinary ability-rank grouping", function()
+    local _, state, meter = Native()
+    state.records = Ranks(2)
+    for _, record in ipairs(state.records) do
+        record.origins = { "unavailable-item-origin" }
+    end
+    local source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2, "unknown actual origin fell through to a guessed ability family")
+    state.extraSources =
+        { ["unavailable-item-origin"] = { sourceKey = "unavailable-item-origin", kind = "invalid-kind" } }
+    state.context.metadataRevision = "malformed-origin-kind"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2, "malformed origin kind fell through to a guessed ability family")
+    state.extraSources = { ["unavailable-item-origin"] = { sourceKey = "unavailable-item-origin", kind = "talent" } }
+    state.context.metadataRevision = "known-non-item-origin"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1, "known non-item origin changed the original ability-rank behavior")
+end)
+
+Test("partial own item identity cannot borrow a rank from another positive member", function()
+    local _, state, meter = Native()
+    state.records, state.extraSources = ItemEffects(2)
+    for _, record in ipairs(state.records) do
+        record.itemKey = "eye_of_hakkar"
+    end
+    state.mutate = function(snapshot)
+        local leaf = Copy(snapshot.contributions[1])
+        leaf.rowId, leaf.originSourceKeys = "origin-free-member", {}
+        table.insert(snapshot.contributions, leaf)
+        table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+    end
+    local source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2, "own item key without rank borrowed another member's item rank")
+    state.mutate = nil
+    for _, record in ipairs(state.records) do
+        record.kind, record.rank = "ability", 7
+    end
+    state.context.metadataRevision = "skill-and-item-ranks-differ"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1 and source[1].name == "The Eye of Hakkar 2", "skill rank replaced actual item rank")
+end)
+
+Test("item rank summaries retain pet casters and repeated native source membership", function()
+    local _, state, meter = Native()
+    local view = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" }
+    state.records = ItemRanks(2)
+    local repeated = Copy(state.records[2])
+    repeated.rowId = "hakkar-repeat"
+    table.insert(state.records, repeated)
+    for index, record in ipairs(state.records) do
+        record.actorId, record.actorKind, record.actorName, record.summonKey = "imp-" .. index, "summon", "Imp", "imp"
+    end
+    local source = assert(meter.Read(view, 10))
+    assert(table.getn(source) == 1 and source[1].dmg == 40 and source[1].name == "The Eye of Hakkar 2 (Imp)")
+    state.records[3].summonKey, state.records[3].actorName = "doomguard", "Doomguard"
+    state.context.metadataRevision = "different-item-caster"
+    source = assert(meter.Read(view, 10))
+    assert(table.getn(source) == 2, "item ranks merged unrelated pet definitions")
+    source = assert(meter.Read(view, 10, true))
+    assert(table.getn(source) == 2 and source[1].name == "Imp", "item grouping displaced optional pet summary")
+    state.records, state.extraSources = ItemEffects(2)
+    for index, record in ipairs(state.records) do
+        record.actorId, record.actorKind, record.actorName, record.summonKey = "imp-" .. index, "summon", "Imp", "imp"
+    end
+    state.mutate = function(snapshot) snapshot.contributions[1].actorId = "unrelated-caster" end
+    state.context.metadataRevision = "mismatched-item-member-caster"
+    source = assert(meter.Read(view, 10))
+    assert(table.getn(source) == 2, "item origin borrowed a contribution from a different actor")
+end)
+
+Test("actual talent triggers supply native captions and artwork without changing spell records", function()
+    for _, view in ipairs({ damage, healing, boss }) do
+        local _, state, meter = Native()
+        state.records, state.extraSources = Talents()
+        state.records[1].origins = { "hot-streak" }
+        state.records[3].kind, state.records[4].kind = "effect", "generic"
+        local source, total = meter.Read(view, 10)
+        assert(table.getn(source) == 4 and total == 19100)
+        assert(source[1].name == "Pyroblast" and source[1].proc == 0, "normal spell cast took its modifier's name")
+        assert(source[2].name == "Hot Streak" and source[2].proc == 1 and source[2].dmg == 4900)
+        assert(source[3].name == "Chastise" and source[4].name == "Received shaman talent")
+        assert(source[2].icon == "Interface\\Icons\\hot-streak-talent")
+        assert(state.lastResponse.sources["pyroblast-proc"].name == "Pyroblast")
+        assert(state.lastResponse.sources["holy-nova-proc"].name == "FX Holy nova")
+        assert(state.lastResponse.rows[2].displayAmount == 4900 and state.lastResponse.rows[2].nativeProc)
+        local identity = source[2].rowId
+        source = assert(meter.Read(view, 10))
+        assert(source[2].rowId == identity and source[2].icon == "Interface\\Icons\\hot-streak-talent")
+    end
+end)
+
+Test("talent presentation rejects absent, modifier-only, malformed and mixed attribution", function()
+    local cases = {
+        function(state) state.records[1].proc = false end,
+        function(state)
+            state.records[1].origins, state.records[1].definitionOrigins = {}, { "hot-streak" }
+        end,
+        function(state)
+            state.records[1].origins, state.records[1].talentKey = {}, "hot_streak"
+        end,
+        function(state) state.extraSources["hot-streak"] = nil end,
+        function(state) state.extraSources["hot-streak"].name = "" end,
+        function(state) state.extraSources["hot-streak"].sourceKey = "different-source" end,
+        function(state) state.extraSources["hot-streak"].kind = "generic" end,
+        function(state) state.extraSources["hot-streak"].attribution = "unknown" end,
+        function(state) state.extraSources["hot-streak"].attribution = "mixed" end,
+        function(state) state.extraSources["hot-streak"].attribution = nil end,
+        function(state) state.extraSources["hot-streak"].icon = { status = "ready" } end,
+        function(state) state.records[1].origins = { "hot-streak", "chastise" } end,
+        function(state)
+            state.mutate = function(snapshot) snapshot.rows[1].memberIds = {} end
+        end,
+        function(state)
+            state.mutate = function(snapshot) snapshot.rows[1].memberIds = { "unavailable" } end
+        end,
+        function(state)
+            state.mutate = function(snapshot) snapshot.contributions[1].ownerId = "other-owner" end
+        end,
+        function(state)
+            state.mutate = function(snapshot) snapshot.contributions[1].nativeProc = false end
+        end,
+    }
+    for _, mutate in ipairs(cases) do
+        local _, state, meter = Native()
+        local records
+        records, state.extraSources = Talents()
+        state.records = { records[2] }
+        mutate(state)
+        local source = assert(meter.Read(damage, 10))
+        assert(table.getn(source) == 1 and source[1].name == "Pyroblast", "uncertain origin invented a talent caption")
+        assert(source[1].icon == "Interface\\Icons\\pyroblast-proc", "uncertain origin replaced native source artwork")
+    end
+end)
+
+Test("all positive source members must agree on one actual talent while retired members are ignored", function()
+    for _, origin in ipairs({ "hot-streak", "chastise", "missing" }) do
+        local _, state, meter = Native()
+        local records
+        records, state.extraSources = Talents()
+        state.records = { records[2] }
+        state.mutate = function(snapshot)
+            local leaf = Copy(snapshot.contributions[1])
+            leaf.rowId, leaf.originSourceKeys = "second-positive-member", { origin }
+            table.insert(snapshot.contributions, leaf)
+            table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+        end
+        local source = assert(meter.Read(damage, 10))
+        assert(source[1].name == (origin == "hot-streak" and "Hot Streak" or "Pyroblast"))
+        assert(source[1].dmg == 4900, "talent display counted actual member amounts a second time")
+    end
+    local _, state, meter = Native()
+    local records
+    records, state.extraSources = Talents()
+    state.records = { records[2] }
+    state.mutate = function(snapshot)
+        local leaf = Copy(snapshot.contributions[1])
+        leaf.rowId, leaf.displayAmount, leaf.originSourceKeys = "retired-member", 0, { "missing" }
+        table.insert(snapshot.contributions, leaf)
+        table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+    end
+    local source = assert(meter.Read(damage, 10))
+    assert(source[1].name == "Hot Streak", "retired zero-delta contribution supplied current attribution")
+    state.mutate = function(snapshot)
+        local leaf = Copy(snapshot.contributions[1])
+        leaf.rowId, leaf.originSourceKeys = "unattributed-positive-member", {}
+        table.insert(snapshot.contributions, leaf)
+        table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+    end
+    state.context.counterRevision = "positive-unattributed-member"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].name == "Pyroblast", "one known talent borrowed attribution for an unrelated positive member")
+end)
+
+Test("rank summaries separate actual talent origins and fallback spell sources", function()
+    local _, state, meter = Native()
+    local _
+    _, state.extraSources = Talents()
+    state.records = Ranks(3)
+    for _, record in ipairs(state.records) do
+        record.proc, record.origins = true, { "hot-streak" }
+    end
+    state.records[3].origins = { "chastise" }
+    local source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2 and source[1].name == "Hot Streak" and source[1].dmg == 50)
+    assert(source[2].name == "Chastise" and source[2].dmg == 10, "different triggering talents shared a rank caption")
+    local identity = source[1].rowId
+    state.records[3].origins = {}
+    state.context.counterRevision = "fallback-rank-source"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2 and source[1].rowId == identity and source[1].dmg == 50)
+    assert(source[2].name == "Flamestrike", "rank summary attached a talent label to unknown provenance")
+    state.extraSources["hot-streak"].name = "Série brûlante"
+    state.context.metadataRevision = "localized-talent-ranks"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].name == "Série brûlante" and source[1].rowId == identity)
+end)
+
+Test("talent metadata and pending artwork retain native checkpoints and stable display identities", function()
+    local _, state, meter = Native()
+    local records
+    records, state.extraSources = Talents()
+    state.records = { records[2] }
+    local source = assert(meter.Read(damage, 0))
+    assert(source[1].name == "Hot Streak" and source[1].dmg == 4900)
+    assert(meter.Reset())
+    state.context.asOfRunSeconds = 22
+    source = assert(meter.Read(damage, 0))
+    local identity = source[1].rowId
+    local checkpoint = state.queries[table.getn(state.queries)].checkpointId
+    local captures = state.calls.create
+    assert(source[1].name == "Hot Streak" and source[1].dmg == 490 and source[1].dps == 245)
+    for _, status in ipairs({ "pending", "missing", "ready" }) do
+        local origin = state.extraSources["hot-streak"]
+        origin.icon = status == "pending" and { status = "pending", retryAfterSeconds = 0.2 }
+            or status == "missing" and { status = "missing", reason = "not_available" }
+            or { status = "ready", path = "Interface\\Icons\\updated-talent" }
+        origin.name = "Updated talent " .. status
+        state.context.metadataRevision = "talent-art-" .. status
+        source = assert(meter.Read(damage, 0))
+        assert(source[1].name == origin.name and source[1].rowId == identity and source[1].dmg == 490)
+        assert(
+            source[1].iconStatus == status and source[1].icon == origin.icon.path,
+            "talent art borrowed base spell artwork"
+        )
+        source = assert(meter.Read(damage, 0))
+        assert(
+            source[1].icon == origin.icon.path and source[1].rowId == identity,
+            "unchanged pass restored base artwork"
+        )
+    end
+    assert(state.calls.create == captures and state.queries[table.getn(state.queries)].checkpointId == checkpoint)
+end)
+
+Test("direct talent rows and combined pet summaries keep their authoritative presentation", function()
+    local _, state, meter = Native()
+    local records
+    records, state.extraSources = Talents()
+    state.records = { records[2] }
+    state.records[1].kind, state.records[1].name = "talent", "Direct native talent"
+    local source = assert(meter.Read(damage, 10))
+    assert(source[1].name == "Direct native talent" and source[1].icon == "Interface\\Icons\\pyroblast-proc")
+    records, state.extraSources = Talents()
+    state.records = { records[1], records[2] }
+    for _, record in ipairs(state.records) do
+        record.actorId, record.actorKind, record.actorName, record.summonKey = "imp-1", "summon", "Imp", "imp"
+    end
+    state.context.counterRevision = "talent-pet-caster"
+    local view = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" }
+    source = assert(meter.Read(view, 10))
+    assert(source[1].name == "Pyroblast (Imp)" and source[2].name == "Hot Streak (Imp)")
+    state.mutate = function(snapshot) snapshot.contributions[2].actorId = "unrelated-pet" end
+    state.context.counterRevision = "mismatched-talent-caster"
+    source = assert(meter.Read(view, 10))
+    assert(source[2].name == "Pyroblast (Imp)", "talent attribution borrowed another caster's member")
+    state.mutate = nil
+    source = assert(meter.Read(view, 10, true))
+    assert(table.getn(source) == 1 and source[1].name == "Imp" and source[1].dmg == 14300)
+end)
+
+Test("counter and unrelated metadata publications reuse prepared native identities", function()
+    local c, state, meter = Native()
+    state.records = Ranks(30)
+    local lengths, sorts = 0, 0
+    local nativeString, nativeTable = c.env.string, c.env.table
+    c.env.string = setmetatable({
+        len = function(value)
+            lengths = lengths + 1
+            return nativeString.len(value)
+        end,
+    }, { __index = nativeString })
+    c.env.table = setmetatable({
+        sort = function(values, compare)
+            sorts = sorts + 1
+            return nativeTable.sort(values, compare)
+        end,
+    }, { __index = nativeTable })
+    local source = assert(meter.Read(damage, 10))
+    local identity = source[1].rowId
+    assert(source[1].dmg == 4650 and lengths > 0 and sorts == 1)
+    lengths = 0
+    for tick = 1, 5 do
+        state.context.counterRevision = "counter-only-" .. tick
+        state.context.asOfRunSeconds = 20 + tick
+        source = assert(meter.Read(damage, 10))
+        assert(source[1].rowId == identity and source[1].dmg == 4650)
+    end
+    assert(lengths == 0 and sorts == 1, "counter-only values rebuilt stable keys or sorted an unchanged view")
+    state.context.metadataRevision = "unrelated-new-demon-metadata"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].rowId == identity and lengths == 0 and sorts == 1, "unrelated metadata rebuilt existing families")
+    state.records[1].amount = state.records[1].amount + 10
+    state.context.counterRevision = "amount-change"
+    source = assert(meter.Read(damage, 10))
+    assert(
+        source[1].dmg == 4660 and lengths == 0 and sorts == 2,
+        "numeric refresh lost ordering or repeated identity work"
+    )
+end)
+
+Test("clock-only refresh preserves combined ordering and native rates", function()
+    local _, state, meter = Native()
+    state.records = Ranks(2)
+    state.records[1].amount, state.records[2].amount = 40, 40
+    table.insert(
+        state.records,
+        1,
+        { id = "leading-native-row", rowId = "leading-native-row", name = "Other", amount = 60, recent = 12 }
+    )
+    local source = assert(meter.Read(damage, 10))
+    local identity = source[1].rowId
+    assert(source[1].name == "Flamestrike" and source[1].dmg == 80 and source[2].dmg == 60)
+    state.context.asOfRunSeconds, state.context.snapshotId = 25, "clock-only-capture"
+    state.records[2].recent, state.records[3].recent = 20, 10
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].rowId == identity and source[1].name == "Flamestrike" and source[1].dps == 3)
+    assert(source[1].averageDps == 3.2 and source[2].name == "Other", "clock pass lost grouped amount ordering")
+end)
+
+Test("incremental member positions recover new tails, reorder and retirement", function()
+    local _, state, meter = Native()
+    state.records, state.extraSources = ItemEffects(3)
+    local source = assert(meter.Read(damage, 10))
+    local identity = source[1].rowId
+    local first = table.remove(state.records, 1)
+    table.insert(state.records, first)
+    state.context.counterRevision = "reordered-native-members"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].rowId == identity and source[1].dmg == 60 and source[1].name == "The Eye of Hakkar 3")
+    state.records, state.extraSources = ItemEffects(4)
+    state.context.counterRevision = "new-native-source-tail"
+    source = assert(meter.Read(damage, 10))
+    assert(source[1].rowId == identity and source[1].dmg == 100 and source[1].name == "The Eye of Hakkar 4")
+    state.records, state.extraSources = ItemEffects(1)
+    state.context.counterRevision = "native-source-retirement"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1 and source[1].dmg == 10 and source[1].name == "The Eye of Hakkar 1")
+    state.records, state.extraSources = ItemEffects(2)
+    state.context.counterRevision = "new-source-after-retirement"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 1 and source[1].dmg == 30 and source[1].name == "The Eye of Hakkar 2")
+end)
+
+Test("counter-only late positive members reevaluate actual talent and item attribution", function()
+    for _, kind in ipairs({ "talent", "item" }) do
+        local _, state, meter = Native()
+        if kind == "talent" then
+            local records
+            records, state.extraSources = Talents()
+            state.records = { records[2] }
+        else
+            state.records, state.extraSources = ItemEffects(2)
+        end
+        local positive = false
+        state.mutate = function(snapshot)
+            local leaf = Copy(snapshot.contributions[1])
+            leaf.rowId = "retained-zero-member"
+            leaf.displayAmount, leaf.sinceCheckpointAmount = positive and 1 or 0, positive and 1 or 0
+            leaf.originSourceKeys = { kind == "talent" and "chastise" or "hakkar-rank-1" }
+            table.insert(snapshot.contributions, leaf)
+            table.insert(snapshot.rows[1].memberIds, leaf.rowId)
+        end
+        assert(meter.Reset())
+        state.context.asOfRunSeconds = 22
+        local source = assert(meter.Read(damage, 0))
+        assert(source[1].name == (kind == "talent" and "Hot Streak" or "The Eye of Hakkar 2"))
+        positive = true
+        state.context.counterRevision = "historical-member-now-positive"
+        source = assert(meter.Read(damage, 0))
+        if kind == "talent" then
+            assert(source[1].name == "Pyroblast", "cached zero-member fingerprint mislabeled a mixed talent source")
+        else
+            assert(table.getn(source) == 2, "cached zero-member fingerprint merged incompatible item origins")
+        end
+    end
+end)
+
+Test("new active contribution tails do not reindex unrelated retained zero history", function()
+    local _, state, meter = Native()
+    state.records = { { id = "active-old", rowId = "active-old", name = "Old", amount = 100, recent = 20, after = 10 } }
+    local historyReads = 0
+    state.mutate = function(snapshot)
+        local appended = snapshot.contributions[2]
+        snapshot.contributions[2] = nil
+        for index = 1, 1000 do
+            local id = "retired-" .. index
+            local leaf = Copy(snapshot.contributions[1])
+            leaf.rowId, leaf.sourceKey, leaf.periodAmount = id, id, 1
+            leaf.displayAmount, leaf.sinceCheckpointAmount, leaf.windowAmount = 0, 0, 0
+            leaf.periodAverage.amount, leaf.periodAverage.value = 1, 1 / leaf.periodAverage.denominatorSeconds
+            for _, rate in ipairs({ leaf.checkpointAverage, leaf.recentRate, leaf.displayRate }) do
+                rate.amount, rate.value = 0, 0
+            end
+            leaf.share = 0
+            snapshot.sources[id] = {
+                sourceKey = id,
+                kind = "generic",
+                name = "Retired",
+                icon = { status = "missing", reason = "not_available" },
+            }
+            table.insert(
+                snapshot.contributions,
+                setmetatable({}, {
+                    __index = function(_, key)
+                        if key == "rowId" then historyReads = historyReads + 1 end
+                        return leaf[key]
+                    end,
+                })
+            )
+        end
+        if appended then table.insert(snapshot.contributions, appended) end
+        snapshot.totals.periodAmount = snapshot.totals.periodAmount + 1000
+        snapshot.totals.periodAverage.amount = snapshot.totals.periodAverage.amount + 1000
+        snapshot.totals.periodAverage.value = snapshot.totals.periodAverage.amount
+            / snapshot.totals.periodAverage.denominatorSeconds
+    end
+    assert(meter.Reset())
+    state.context.asOfRunSeconds = 22
+    local source = assert(meter.Read(damage, 10))
+    assert(source[1].dmg == 10 and historyReads >= 1000)
+    historyReads = 0
+    table.insert(
+        state.records,
+        { id = "active-new", rowId = "active-new", name = "New", amount = 50, recent = 10, after = 5 }
+    )
+    state.context.counterRevision = "appended-active-contribution"
+    source = assert(meter.Read(damage, 10))
+    assert(table.getn(source) == 2 and source[1].dmg == 10 and source[2].dmg == 5)
+    assert(historyReads == 0, "new active tail rescanned the unrelated retained history prefix")
+end)
+
+Test("shared refresh context reuses only an exact accepted native capture", function()
+    local _, state, meter = Native()
+    local context = assert(meter.Context())
+    local source, total, rate = meter.Read(damage, 10, false, context)
+    assert(source and total == 140 and rate == 6 and state.calls.context == 1 and state.calls.snapshot == 1)
+    source = assert(meter.Read(damage, 10, false, context))
+    assert(source[1].dmg == 100 and state.calls.snapshot == 1, "exact native capture repeated full snapshot work")
+    state.context.asOfRunSeconds, state.context.snapshotId = 21, "native-clock-moved"
+    context = assert(meter.Context())
+    assert(meter.Read(damage, 10, false, context) and state.calls.context == 2 and state.calls.snapshot == 2)
+    state.mutate = function(snapshot) snapshot.query.checkpointId = "unrequested" end
+    state.context.snapshotId = "fresh-malformed-capture"
+    context = assert(meter.Context())
+    assert(not meter.Read(damage, 10, false, context), "fresh malformed capture bypassed validation")
+    state.mutate = nil
+    assert(
+        meter.Read(damage, 10, false, context) and state.calls.snapshot == 4,
+        "rejected capture replayed an older cache"
+    )
+    local before = state.calls.context
+    state.snapshotError = Error("NOT_READY")
+    assert(
+        not meter.Read(damage, 10) and state.calls.context == before + 1,
+        "direct adapter call stopped reading fresh context/snapshot"
+    )
+end)
+
+Test("shared context is validated and a newer embedded snapshot remains authoritative", function()
+    local _, state, meter = Native()
+    local context = assert(meter.Context())
+    local invalid = Copy(context)
+    invalid.asOfRunSeconds = -1
+    assert(
+        not meter.Read(damage, 10, false, invalid) and not state.calls.snapshot,
+        "invalid forwarded context reached native snapshot"
+    )
+    state.mutate = function(snapshot)
+        snapshot.context.asOfRunSeconds, snapshot.context.snapshotId = 22, "mid-call-capture"
+    end
+    local source, _, _, _, _, meta = meter.Read(damage, 10, false, context)
+    assert(source and meta.snapshotId == "mid-call-capture", "earlier phase context replaced the snapshot's capture")
+    assert(
+        meter.Read(damage, 10, false, context) and state.calls.snapshot == 2,
+        "older phase context reused a newer mismatched capture"
+    )
+end)
+
+Test("pet skills keep the caster and combine repeated native summon definitions", function()
+    local _, state, meter = Native()
+    local view = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" }
+    state.records = Pets()
+    local source, total, rate = meter.Read(view, 10)
+    assert(table.getn(source) == 3 and total == 220 and rate == 11)
+    assert(source[1].name == "Shadowbolt" and source[1].dmg == 100, "pet casts merged with the hero's same source")
+    assert(source[2].name == "Shadowbolt (Imp)" and source[2].dmg == 60 and source[2].dps == 3)
+    assert(
+        source[3].name == "Hellfire (Imp)" and source[3].dmg == 60 and source[3].icon == "Interface\\Icons\\hellfire"
+    )
+    assert(table.getn(state.lastResponse.rows) == 4 and state.lastResponse.rows[2].displayAmount == 40)
+    local identity = source[2].rowId
+    state.records[2].actorId, state.records[3].actorId = "imp-3", "imp-4"
+    state.context.counterRevision = "new-imp-incarnations"
+    source = assert(meter.Read(view, 10))
+    assert(source[2].rowId == identity and source[2].dmg == 60, "new incarnations replaced the native summon family")
+    state.records[3].id = "shadowbolt-distinct-definition"
+    state.context.metadataRevision = "ambiguous-pet-rank"
+    source = assert(meter.Read(view, 10))
+    assert(table.getn(source) == 4, "different native descriptors at the same rank lost their ambiguity")
+end)
+
+Test("pet summaries preserve native rates, reset fences and presentation changes", function()
+    local _, state, meter = Native()
+    local view = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" }
+    state.records = Pets()
+    state.records[2].proc = true
+    local source, total, rate, _, revision = meter.Read(view, 10, true)
+    assert(table.getn(source) == 2 and source[1].name == "Imp" and source[1].dmg == 120)
+    assert(source[1].dps == 6 and source[1].averageDps == 6 and source[1].share == 120 / 220)
+    assert(total == 220 and rate == 11 and source[1].proc == 0, "mixed pet skills changed accounting or proc styling")
+    assert(source[1].icon == nil and source[1].portraitKey == "portrait-imp-1" and source[1].portraitStatus == "ready")
+    local _, _, _, _, detailRevision = meter.Read(view, 10, false)
+    assert(detailRevision ~= revision, "option change did not publish the changed row presentation")
+    source = assert(meter.Read(view, 10, true))
+    assert(source[1].name == "Imp" and source[1].dmg == 120)
+    assert(meter.Reset())
+    state.context.asOfRunSeconds = 22
+    source = assert(meter.Read(view, 0, true))
+    assert(source[1].dmg == 12 and source[1].dps == 6 and source[2].dmg == 10)
+    local checkpoint = state.queries[table.getn(state.queries)].checkpointId
+    local captures = state.calls.create
+    local identity = source[1].rowId
+    for _, record in ipairs(state.records) do
+        if record.actorId then record.actorName = "Wichtel" end
+    end
+    state.context.languageCode, state.context.languageRevision = "de", "pet-language-de"
+    state.context.metadataRevision = "pet-meta-de"
+    source = assert(meter.Read(view, 0, true))
+    assert(source[1].name == "Wichtel" and source[1].rowId == identity and source[1].dmg == 12)
+    state.records[3].recentStatus = "unavailable"
+    source = assert(meter.Read(view, 10, true))
+    assert(source[1].dps == nil and source[1].averageDps == 6, "known skills replaced an unavailable member rate")
+    source = assert(meter.Read(view, 10, false))
+    assert(table.getn(source) == 4, "mixed proc detail rows lost their native distinction")
+    assert(state.calls.create == captures and state.queries[table.getn(state.queries)].checkpointId == checkpoint)
+    assert(state.queries[table.getn(state.queries)].groupBy == "actor_source")
+end)
+
+Test("pet grouping never guesses relationships from names or broad pet families", function()
+    local cases = {
+        { kind = "summon", field = "summonKey", first = "imp", second = "imp", count = 1 },
+        { kind = "summon", field = "summonKey", first = "imp", second = "doomguard", count = 2 },
+        { kind = "pet", field = "summonKey", first = "pet-definition", second = "pet-definition", count = 1 },
+        { kind = "pet", count = 2 },
+        { kind = "totem", field = "totemKey", first = "searing", second = "searing", count = 1 },
+        { kind = "totem", field = "summonKey", first = "same-unused-key", second = "same-unused-key", count = 2 },
+        { kind = "summon", field = "summonKey", first = "imp", second = "imp", otherKind = "pet", count = 2 },
+        { kind = "summon", field = "summonKey", first = "imp", second = "imp", otherOwner = "hero-2", count = 2 },
+    }
+    for _, case in ipairs(cases) do
+        local _, state, meter = Native()
+        state.records = {
+            { id = "effect", rowId = "one", name = "Attack", amount = 20, recent = 10, actorId = "pet-one" },
+            { id = "effect", rowId = "two", name = "Attack", amount = 10, recent = 5, actorId = "pet-two" },
+        }
+        for _, record in ipairs(state.records) do
+            record.actorKind, record.actorName, record.petFamilyKey = case.kind, "Same received name", "wolf"
+            record.kind = "effect"
+        end
+        if case.field then
+            state.records[1][case.field], state.records[2][case.field] = case.first, case.second
+        end
+        state.records[2].actorKind = case.otherKind or case.kind
+        state.records[2].ownerId = case.otherOwner
+        local view = { metric = "damage", scope = "party", period = "run", groupBy = "actor_source" }
+        local source = assert(meter.Read(view, 10))
+        assert(table.getn(source) == case.count, "detail skills inferred a pet definition from name or family")
+        source = assert(meter.Read(view, 10, true))
+        assert(table.getn(source) == case.count, "pet summary discarded explicit actor/owner distinctions")
+    end
+end)
+
+Test("pet attribution rejects missing native actor metadata and keeps unknown actors literal", function()
+    local _, state, meter = Native()
+    local view = { metric = "damage", scope = "self", period = "run", groupBy = "actor_source" }
+    state.records = Pets()
+    state.mutate = function(snapshot) snapshot.actors["imp-1"] = nil end
+    local source = meter.Read(view, 10, true)
+    assert(not source, "missing caster metadata silently guessed a pet name")
+    state.mutate = function(snapshot) snapshot.actors["imp-1"].name = "" end
+    source = meter.Read(view, 10, true)
+    assert(not source, "empty caster metadata silently guessed a pet name")
+    state.mutate = nil
+    for _, record in ipairs(state.records) do
+        if record.actorId then record.actorKind = "unknown" end
+    end
+    state.context.metadataRevision = "unknown-actors"
+    source = assert(meter.Read(view, 10, true))
+    assert(table.getn(source) == 4, "unknown actors were relabeled or combined as pets")
+    for _, row in ipairs(source) do
+        assert(row.name == "Shadowbolt" or row.name == "Hellfire")
+    end
+end)
+
+Test("scheduled recent caches retain native zero, unavailable and warming-up results", function()
+    local cases = {
+        { time = 20, recent = 0, status = "ready", expected = 0 },
+        { time = 20, recent = 50, status = "unavailable", expectedStatus = "unavailable" },
+        { time = 0.5, recent = 5, status = "ready", expectedStatus = "warming_up" },
+    }
+    for _, case in ipairs(cases) do
+        local _, state, meter = Native()
+        state.records =
+            { { id = "native-rate", rowId = "native-rate", name = "Native rate", amount = 100, recent = case.recent } }
+        state.context.asOfRunSeconds, state.recentStatus = case.time, case.status
+        if case.time < 10 then state.context.encounter = nil end
+        local policy = { offset = 0, count = 1, refresh = true }
+        local source, total, rate, _, _, meta = meter.Read(damage, 10, false, nil, policy)
+        assert(source and total == 100 and source[1].dps == case.expected and rate == case.expected)
+        assert(meta.recentStatus == (case.expectedStatus or case.status))
+        state.records[1].amount, state.records[1].recent = 125, 90
+        state.context.asOfRunSeconds, state.context.counterRevision = case.time + 0.1, "counter-with-cached-native-rate"
+        policy.refresh = false
+        source, total, rate, _, _, meta = meter.Read(damage, 10, false, nil, policy)
+        assert(source and total == 125 and source[1].dps == case.expected and rate == case.expected)
+        assert(
+            table.getn(state.queries) == 2 and state.queries[2].windowSeconds == 0,
+            "cached nil or zero repeated native history"
+        )
+        assert(meta.recentStatus == (case.expectedStatus or case.status))
+        assert(meta.recentAsOfRunSeconds == case.time and meta.asOfRunSeconds == case.time + 0.1)
+    end
+end)
+
+Test("new family members force native history and its newer capture supplies all returned values", function()
+    local _, state, meter, env = Native()
+    state.records = Ranks(1)
+    local policy = { offset = 0, count = 1, refresh = true }
+    local source = assert(meter.Read(damage, 10, false, nil, policy))
+    local identity = source[1].rowId
+    state.records = Ranks(2)
+    state.context.asOfRunSeconds, state.context.counterRevision = 21, "rank-added-between-rate-samples"
+    local original = env.AZS_GetMeterSnapshot
+    env.AZS_GetMeterSnapshot = function(query)
+        if query.windowSeconds > 0 then
+            state.context.asOfRunSeconds, state.context.snapshotId = 22, "newer-positive-capture"
+            state.context.counterRevision, state.records[1].amount = "newer-positive-counters", 200
+        end
+        return original(query)
+    end
+    policy.refresh = false
+    local total, rate, meta
+    source, total, rate, _, _, meta = meter.Read(damage, 10, false, nil, policy)
+    assert(source and source[1].rowId == identity and source[1].dmg == 210 and total == 210)
+    assert(meta.snapshotId == "newer-positive-capture" and meta.asOfRunSeconds == 22)
+    assert(state.queries[2].windowSeconds == 0 and state.queries[3].windowSeconds == 10)
+    local response = state.lastResponse
+    assert(rate == response.totals.displayRate.value and meta.averageRate == response.totals.periodAverage.value)
+    local expected = response.rows[1].displayRate.value + response.rows[2].displayRate.value
+    assert(source[1].dps == expected, "new group reused a partial old native rate")
+end)
+
+Test("viewport recent caches retire old identities without adding a fifth physical-query view", function()
+    do
+        local _, state, meter = Native()
+        state.records = {
+            { id = "one", rowId = "one", name = "One", amount = 100, recent = 10, rank = 1 },
+            { id = "two", rowId = "two", name = "Two", amount = 50, recent = 20, rank = 1 },
+        }
+        local policy = { offset = 0, count = 1, refresh = true }
+        assert(meter.Read(damage, 10, false, nil, policy))
+        policy.offset, policy.refresh = 1, false
+        local source = assert(meter.Read(damage, 10, false, nil, policy))
+        assert(source[2].dps == 2 and table.getn(state.queries) == 2)
+        assert(state.queries[2].windowSeconds == 10, "known viewport miss copied counters before requesting rates")
+        state.records[1].recent, state.context.counterRevision = 90, "reveal-retired-rate-identity"
+        policy.offset = 0
+        source = assert(meter.Read(damage, 10, false, nil, policy))
+        assert(source[1].dps == 9 and table.getn(state.queries) == 3, "retired viewport reused stale native history")
+    end
+    do
+        local _, state, meter = Native()
+        state.records = Ranks(1)
+        local policy = { offset = 0, count = 1, refresh = true }
+        local source = assert(meter.Read(damage, 10, false, nil, policy))
+        local identity = source[1].rowId
+        policy.refresh = false
+        state.context.asOfRunSeconds, state.context.counterRevision = 21, "logical-view-counter-capture"
+        assert(meter.Read(damage, 10, false, nil, policy))
+        assert(meter.Read(healing, 0) and meter.Read(boss, 0) and meter.Read(party, 0))
+        source = assert(meter.Read(damage, 10, false, nil, policy))
+        assert(source[1].rowId == identity, "counter-only physical query evicted one of the four logical views")
+    end
+end)
+
+Test("physical recent failures never expose All rates and do not poison counter retries", function()
+    local c, state, meter, env = Native()
+    state.records = Ranks(1)
+    local policy = { offset = 0, count = 1, refresh = true }
+    assert(meter.Read(damage, 10, false, nil, policy))
+    local original = env.AZS_GetMeterSnapshot
+    local failWindow = 0
+    env.AZS_GetMeterSnapshot = function(query)
+        if query.windowSeconds == failWindow then
+            state.snapshotError = Error("NOT_READY")
+        else
+            state.snapshotError = nil
+        end
+        return original(query)
+    end
+    policy.refresh = false
+    assert(not meter.Read(damage, 10, false, nil, policy), "failed counter query replayed a stale source list")
+    policy.refresh = true
+    assert(meter.Read(damage, 10, false, nil, policy), "counter retry deadline blocked an independent recent query")
+    c.now = c.now + 0.21
+    state.records = Ranks(2)
+    state.context.counterRevision, failWindow = "new-group-with-failed-native-history", 10
+    policy.refresh = false
+    local source, total, rate = meter.Read(damage, 10, false, nil, policy)
+    assert(not source and total == nil and rate == nil, "failed forced history returned All data as recent")
+    assert(state.queries[table.getn(state.queries) - 1].windowSeconds == 0)
+    assert(state.queries[table.getn(state.queries)].windowSeconds == 10)
+    state.snapshotError, failWindow = nil, nil
+    c.now = c.now + 0.21
+    source = assert(meter.Read(damage, 10, false, nil, policy))
+    assert(
+        source[1].dmg == 30 and math.abs(source[1].dps - 0.6) < 0.000000001,
+        "fresh native history did not recover the changed family"
+    )
 end)

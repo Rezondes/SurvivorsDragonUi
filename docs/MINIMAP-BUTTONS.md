@@ -24,18 +24,47 @@ dialog at 150. This keeps the second click reachable. Closing restores the
 minimap's current strata and its level plus twenty, with actual-state comparisons
 to skip unchanged writes. There is no new region, event or updater for layering.
 
+The default map top is 26 UI units below the screen top. The zone panel sits
+12 units above the map, tightening their gap by six units while retaining the
+zone strip's default screen position. Saved Layout positions still take priority.
+Both Performance Mode states use these static anchors with no added regions,
+artwork or recurring work.
+
 ## Optional local clock
 
-`/sdui` → **Minimap** → **Show clock** is off by default. With it off, the zone
-name is centered in the existing top panel and the clock has no update callback
-or local-time reads. Turning it on restores the zone name's left position and
-shows local time on the right. The existing worker checks the date every five
-seconds only while the clock is enabled and visible; unchanged minutes skip text
-writes. Hiding/disabling clears only its owned hover. Show samples fresh time.
+`/sdui` → **Minimap** → **Show clock** is on by default, with the zone name on
+the left and local time on the right. Turning it off centers the zone name in
+the existing top panel and stops the clock's update callback and local-time
+reads. The existing worker checks the date every five
+seconds only while the clock is enabled and visible on older builds. With
+`AZS_GetLocalTime()` available, that same worker reads the native snapshot
+instead. Our label and tooltip use its hour/minute fields in **24-hour `HH:MM`**
+format, including when the native English caption uses AM/PM. Unchanged native
+hour/minute pairs skip formatting; all paths skip unchanged text writes.
+Hiding/disabling clears only its owned hover.
+Show, world entry and language changes sample fresh time.
 
 `minimapShowClock` uses the existing display table and shared live preview,
 Confirm, Cancel/discard, profiles and both reset paths. Missing/invalid values
-and resets mean off. It adds no SavedVariable, drawing region or asset.
+and resets mean on; an explicitly saved off choice stays off. It adds no
+SavedVariable, drawing region or asset.
+
+On builds that also recognize the native `localClock` HUD part, on hides the
+game clock once our text/font is ready; off hides both clocks. The shared HUD
+owner captures the original preference and later external changes, restoring it
+on world leave, logout, reload or an unavailable replacement. A failed native
+handoff hides our caption until the existing visible worker can retry. The run
+timer's separate `clock` part is untouched. Missing or invalid native readings
+clear our text and release native ownership; they never fall back to a second
+reading while that getter exists. Older builds without the getter keep the
+existing date fallback and receive no unknown HUD-part calls.
+
+The existing clock frame handles visibility, world/CVar delivery and cleanup;
+there is no new frame, setting, asset or idle updater. Both Performance Mode
+states use the same static behavior. The native contract is recorded in
+[Local-clock API proposal](LOCAL-CLOCK-API-PROPOSAL.md). The addon consumer has
+source review and CI-only mocks; installed API availability and in-game
+handoff remain unverified. No local tests or game execution were performed.
 
 ## Square placement
 
