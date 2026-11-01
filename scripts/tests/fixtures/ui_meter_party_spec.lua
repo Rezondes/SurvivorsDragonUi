@@ -9,7 +9,7 @@ local function Test(name, callback)
     print("PASS " .. name)
 end
 
-local function Meter()
+local function Meter(configure)
     local context = H.New()
     local env = context.env
     local function Count(kind, name)
@@ -173,6 +173,7 @@ local function Meter()
         AZSHEAL = "AZS_HEALING_UPDATED",
         AZSBOSSDMG = "AZS_BOSSMETER_UPDATED",
         AZSPARTY = "AZS_PARTY_UPDATED",
+        AZSTAKEN = "AZS_TAKEN_UPDATED",
     }
     for _, name in pairs(stamps) do
         env[name] = context.now
@@ -183,6 +184,7 @@ local function Meter()
             return env.T.SourceIconFallback
         end,
     }
+    if configure then configure(context, env) end
     context:Load("core/hud.lua")
     context:Load("core/meter_rates.lua")
     context:Load("core/widgets.lua")
@@ -777,22 +779,28 @@ Test("shared Reset includes party counters and preserves class metadata without 
 end)
 
 Test("unchanged meter publications skip counter traversal while native time keeps sampling", function()
-    local context = Meter()
-    context.damage = { context:WatchCounters(context.damage[1]) }
-    context:Tick()
-    context:ResetCounts()
-    for _ = 1, 6 do
-        context.env.AZS_RUN.t = context.env.AZS_RUN.t + 0.21
+    for _, performance in ipairs({ false, true }) do
+        local context = Meter(function(c) c.settings.performanceMode = performance end)
+        context.damage = { context:WatchCounters(context.damage[1]) }
         context:Tick()
+        assert(
+            context:Row(1).entry.name == "Sinister Strike" and context:Row(1).entry.proc == 0,
+            "grouped native accessor rows lost their source identity"
+        )
+        context:ResetCounts()
+        for _ = 1, 6 do
+            context.env.AZS_RUN.t = context.env.AZS_RUN.t + 0.21
+            context:Tick()
+        end
+        assert(context.reads.damage == 6, "cached counters stopped the official getter")
+        assert(not context.reads.counterFields, "unchanged publications retraversed immutable counter fields")
+        assert(context:Row(1).entry.dps == 0, "unchanged counters stopped the rolling native-time window")
+        context.env.DFRL.ResetMeterStats()
+        context:Tick()
+        context:ResetCounts()
+        context:Tick()
+        assert(not context.reads.counterFields, "settled Reset baselines rescanned unchanged counter metadata")
     end
-    assert(context.reads.damage == 6, "cached counters stopped the official getter")
-    assert(not context.reads.counterFields, "unchanged publications retraversed immutable counter fields")
-    assert(context:Row(1).entry.dps == 0, "unchanged counters stopped the rolling native-time window")
-    context.env.DFRL.ResetMeterStats()
-    context:Tick()
-    context:ResetCounts()
-    context:Tick()
-    assert(not context.reads.counterFields, "settled Reset baselines rescanned unchanged counter metadata")
 end)
 
 Test("same-table same-stamp receipts refresh order, class and validation", function()
@@ -871,6 +879,153 @@ Test("publication-cached rolling samples retain gaps, regressions and source ret
     source = {}
     assert(model.Observe(10, source, 0, 0, 3) and model.Header(0) == nil)
     assert(model.Observe(11, source, 0, 0, 3) and model.Header(0) == 0)
+end)
+
+Test("legacy meter keeps four views despite damage-taken publications in both Performance Mode states", function()
+    for _, performance in ipairs({ false, true }) do
+        local context = Meter(function(c, env)
+            c.settings.performanceMode = performance
+            env.AZS_TAKEN = {
+                setmetatable({}, {
+                    __index = function() error("removed damage-taken view read native categories") end,
+                }),
+            }
+            env.AZS_RUN.taken = 100
+        end)
+        context:Tick()
+        assert(context.title:GetText() == "Damage Done")
+        local expected = { "Healing Done", "Boss Damage", "Party Damage", "Damage Done" }
+        for _, title in ipairs(expected) do
+            context:Publish("AZSTAKEN")
+            context:Cycle()
+            assert(context.title:GetText() == title, "damage-taken publication inserted another meter view")
+        end
+        expected = { "Party Damage", "Boss Damage", "Healing Done", "Damage Done" }
+        for _, title in ipairs(expected) do
+            context:Cycle("RightButton")
+            assert(context.title:GetText() == title, "reverse cycle left the four supported meter views")
+        end
+        context:Call(context.header, "OnClick", "RightButton")
+        context:Call(context.header, "OnClick", "LeftButton")
+        context:Tick()
+        assert(context.title:GetText() == "Damage Done", "queued navigation lost the four-view boundary")
+        assert(context.env.AZS_RUN.taken == 100, "meter rewrote the native incoming total")
+    end
+end)
+
+local function LegacyRanks(count)
+    local source, total = {}, count * (count + 1) * 5
+    for rank = count, 1, -1 do
+        table.insert(source, { name = "Flamestrike", dmg = rank * 10, dps = rank, share = rank * 10 / total, proc = 0 })
+    end
+    return source
+end
+
+Test("legacy skill ranks share one row before rate and session accounting", function()
+    local context = Meter(function(c)
+        c.settings.meterDpsWindow = 0
+        c.damage = LegacyRanks(9)
+        for _, entry in ipairs(c.damage) do
+            entry.share = entry.dmg / 650
+        end
+        table.insert(c.damage, 1, { name = "Other", dmg = 200, dps = 20, share = 200 / 650, proc = 0 })
+        c.healing, c.boss = c.damage, c.damage
+    end)
+    context:Tick()
+    for _, title in ipairs({ "Damage Done", "Healing Done", "Boss Damage" }) do
+        assert(context.title:GetText() == title)
+        local first, second = context:Row(1), context:Row(2)
+        assert(first.entry.name == "Flamestrike" and first.entry.dmg == 450 and first.entry.dps == 45)
+        assert(second.entry.name == "Other" and second.entry.dmg == 200)
+        assert(math.abs(first.entry.share - 450 / 650) < 1e-12, "legacy rank grouping changed native shares")
+        assert(not context.env.SurvivorsDragonUiMeterIcon3, "legacy ranks allocated unnecessary display rows")
+        context:Cycle()
+    end
+    assert(table.getn(context.damage) == 10 and context.damage[2].dmg == 90 and context.damage[10].dmg == 10)
+    assert(context.damage[2].dps == 9 and context.damage[2].share == 90 / 650)
+end)
+
+Test("legacy upgraded ranks retain observed rolling DPS and exact proc separation", function()
+    local context = Meter(function(c) c.damage = LegacyRanks(9) end)
+    context:Tick()
+    assert(context:Row(1).entry.name == "Flamestrike" and not context:Row(1).entry.dps)
+    context.env.AZS_RUN.t = 12
+    table.insert(context.damage, 1, { name = "Flamestrike", dmg = 100, dps = 100 / 12, share = 100 / 550, proc = 0 })
+    for _, entry in ipairs(context.damage) do
+        entry.dps, entry.share = entry.dmg / 12, entry.dmg / 550
+    end
+    context:Publish("AZSMETER")
+    context:Tick()
+    for _ = 1, 5 do
+        context:Tick()
+    end
+    assert(
+        context:Row(1).entry.dmg == 550 and context:Row(1).entry.dps == 50,
+        "duplicate ranks invalidated rolling DPS"
+    )
+    context.env.DFRL.ResetMeterStats()
+    context:Tick()
+    assert(not context:Row(1).active, "rank grouping replayed pre-reset damage")
+    context.env.AZS_RUN.t = 14
+    table.insert(context.damage, 1, { name = "Flamestrike", dmg = 110, dps = 110 / 14, share = 110 / 660, proc = 0 })
+    for _, entry in ipairs(context.damage) do
+        entry.dps, entry.share = entry.dmg / 14, entry.dmg / 660
+    end
+    context:Publish("AZSMETER")
+    context:Tick()
+    assert(context:Row(1).entry.dmg == 110 and context:Row(1).entry.dps == 55, "new rank lost the existing X baseline")
+    assert(table.getn(context.damage) == 11 and context.damage[1].dmg == 110)
+
+    local separate = Meter(function(c)
+        c.settings.meterDpsWindow = 0
+        c.damage = {
+            { name = "Flamestrike", dmg = 40, dps = 4, share = 0.4, proc = 0 },
+            { name = "Flamestrike", dmg = 30, dps = 3, share = 0.3, proc = 1 },
+            { name = "Flamestrike", dmg = 20, dps = 2, share = 0.2, proc = 0 },
+            { name = "Flamestrike", dmg = 10, dps = 1, share = 0.1, proc = 1 },
+        }
+    end)
+    separate:Tick()
+    assert(separate:Row(1).entry.dmg == 60 and separate:Row(1).entry.proc == 0)
+    assert(separate:Row(2).entry.dmg == 40 and separate:Row(2).entry.proc == 1, "direct ranks merged with a proc")
+end)
+
+Test("legacy rank groups refresh same-stamp publications without idle presentation work", function()
+    for _, performance in ipairs({ false, true }) do
+        local context = Meter(function(c)
+            c.settings.performanceMode, c.settings.meterDpsWindow = performance, 0
+            c.damage = LegacyRanks(9)
+        end)
+        context:Tick()
+        local first, allocated = context:Row(1), #context.objects
+        context:ResetCounts()
+        context:Tick()
+        context:NoPresentationWrites()
+        assert(#context.objects == allocated and first.entry.dmg == 450)
+        context.damage[1].dmg, context.damage[1].dps = 100, 10
+        for _, entry in ipairs(context.damage) do
+            entry.share = entry.dmg / 460
+        end
+        context:Publish("AZSMETER", context.env.AZS_METER_UPDATED)
+        context:Tick()
+        assert(
+            first.entry.dmg == 460 and #context.objects == allocated,
+            "same-stamp rank update lost grouping or pool reuse"
+        )
+        context:SetLayoutHidden(true)
+        context:ResetCounts()
+        context:Tick()
+        NoMeterReads(context)
+        context:NoPresentationWrites()
+        context:SetLayoutHidden(false)
+        context:Tick()
+        assert(first.active and first.entry.dmg == 460 and #context.objects == allocated)
+        context:SetSetting("meterEnabled", false)
+        context:ResetCounts()
+        context:Tick()
+        NoMeterReads(context)
+        assert(not context.controller:GetScript("OnUpdate"))
+    end
 end)
 
 print("PASS " .. passed .. " party meter contracts")

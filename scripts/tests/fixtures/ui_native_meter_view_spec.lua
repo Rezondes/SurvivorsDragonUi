@@ -8,7 +8,7 @@ local function Test(name, callback)
     print("PASS " .. name)
 end
 
-local function View()
+local function View(configure)
     local c, state, _, env = helpers.New()
     local create = c.Object
     function c:Object(...)
@@ -88,6 +88,7 @@ local function View()
         meterShowTotal = false,
         meterShowTotalDps = false,
     }
+    if configure then configure(c, state, env) end
     c:Load("core/hud.lua")
     c:Load("core/meter_rates.lua")
     c:Load("core/widgets.lua")
@@ -96,13 +97,17 @@ local function View()
     for _, object in ipairs(c.objects) do
         if object.kind == "Button" and object.parent == c.root then c.header = object end
     end
+    for _, object in ipairs(c.objects) do
+        if object.kind == "FontString" and object.parent == c.header then c.title = object end
+        if object.kind == "FontString" and object.parent == c.root then c.status = object end
+    end
     function c:Tick(elapsed)
         local step = elapsed or 0.21
         self.now = self.now + step
         self:Call(self.controller, "OnUpdate", step)
     end
-    function c:Cycle()
-        self:Call(self.header, "OnClick", "LeftButton")
+    function c:Cycle(direction)
+        self:Call(self.header, "OnClick", direction or "LeftButton")
         self:Tick()
     end
     function c:Row(index) return assert(env["SurvivorsDragonUiMeterIcon" .. index]):GetParent() end
@@ -362,4 +367,89 @@ Test("unready publications and invalid reset epochs clear native rows without re
     assert(not c:Row(1):IsShown(), "counter correction replayed pre-checkpoint damage")
     c:Tick()
     assert(not c:Row(1):IsShown(), "a later refresh silently removed the invalid native reset fence")
+end)
+
+Test("native meter keeps four views despite damage-taken publications in both Performance Mode states", function()
+    for _, performance in ipairs({ false, true }) do
+        local c, state, env = View(function(context, _, boundaries)
+            context.settings.performanceMode = performance
+            boundaries.AZS_RUN, boundaries.AZS_RUN_UPDATED = { t = 20, taken = 100 }, context.now
+            boundaries.AZS_TAKEN = {
+                setmetatable({}, {
+                    __index = function() error("native meter read removed legacy damage-taken categories") end,
+                }),
+            }
+            boundaries.AZS_TAKEN_UPDATED = context.now
+        end)
+        assert(not c.controller.events.CHAT_MSG_ADDON, "native meter retained legacy packet intake")
+        assert(c.title:GetText() == "Damage Done")
+        local expected = { "Healing Done", "Boss Damage", "Party Damage", "Damage Done" }
+        for _, title in ipairs(expected) do
+            env.AZS_TAKEN_UPDATED = c.now
+            c:Cycle()
+            assert(c.title:GetText() == title, "published damage taken changed the native meter cycle")
+        end
+        expected = { "Party Damage", "Boss Damage", "Healing Done", "Damage Done" }
+        for _, title in ipairs(expected) do
+            c:Cycle("RightButton")
+            assert(c.title:GetText() == title, "reverse native cycle left the four supported views")
+        end
+        for _, query in ipairs(state.queries) do
+            assert(query.metric == "damage" or query.metric == "healing", "removed view invented a native metric")
+        end
+        assert(env.AZS_RUN.taken == 100, "native meter rewrote incoming counters")
+    end
+end)
+
+Test("native upgraded ranks reuse one displayed ability in both Performance Mode states", function()
+    for _, performance in ipairs({ false, true }) do
+        local c, state, env = View(function(context, native)
+            context.settings.performanceMode = performance
+            native.records = helpers.Ranks(9)
+        end)
+        local first, allocated = c:Row(1), #c.objects
+        local identity = first.entry.rowId
+        assert(first.name:GetText() == "Flamestrike" and first.entry.dmg == 450 and first.entry.dps == 9)
+        assert(not env.SurvivorsDragonUiMeterIcon2, "rank variants allocated extra visible rows")
+        c:ResetCounts()
+        c:Tick()
+        c:NoPresentationWrites()
+        assert(#c.objects == allocated, "unchanged rank groups grew the artwork pool")
+        state.records = helpers.Ranks(10)
+        state.context.snapshotId, state.context.counterRevision = "visible-rank-ten", "visible-rank-ten"
+        c:Tick()
+        for _ = 1, 5 do
+            c:Tick()
+        end
+        assert(first.entry.dmg == 550 and first.entry.dps == 11 and first.entry.rowId == identity)
+        assert(first.icon:GetTexture() == "Interface\\Icons\\flamestrike-rank-10")
+        assert(#c.objects == allocated, "upgrade added a tracker instead of updating its existing row")
+        for _, record in ipairs(state.records) do
+            record.name = "Flammenstoß"
+        end
+        state.context.languageCode, state.context.languageRevision = "de", "visible-rank-de"
+        state.context.metadataRevision, state.context.snapshotId = "visible-rank-meta-de", "visible-rank-de"
+        c:NotifyLocale()
+        c:Tick()
+        assert(first.name:GetText() == "Flammenstoß" and first.entry.rowId == identity and first.entry.dmg == 550)
+        c:SetLayoutHidden(true)
+        state.records = helpers.Ranks(11)
+        state.context.snapshotId, state.context.counterRevision = "hidden-rank-eleven", "hidden-rank-eleven"
+        local snapshots = state.calls.snapshot
+        c:ResetCounts()
+        for _ = 1, 5 do
+            c:Tick()
+        end
+        assert(state.calls.snapshot == snapshots, "hidden rank groups still fetched native rows")
+        c:NoPresentationWrites()
+        c:SetLayoutHidden(false)
+        c:Tick()
+        assert(first.entry.dmg == 660 and first.entry.rowId == identity and #c.objects == allocated)
+        c:SetSetting("meterEnabled", false)
+        snapshots = state.calls.snapshot
+        c:ResetCounts()
+        c:Tick()
+        assert(state.calls.snapshot == snapshots and not c.controller:GetScript("OnUpdate"))
+        c:NoPresentationWrites()
+    end
 end)

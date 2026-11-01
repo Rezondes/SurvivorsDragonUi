@@ -116,7 +116,50 @@ do
     end
     context:Load("core/display.lua", "Display")
     local display = env.DFRL.display
+    env.MainMenuBarPerformanceBarFrame = env.CreateFrame("Frame", "MainMenuBarPerformanceBarFrame", env.UIParent)
+    env.MainMenuExpBar = env.CreateFrame("Frame", "MainMenuExpBar", env.UIParent)
+    env.ReputationWatchBar = env.CreateFrame("Frame", "ReputationWatchBar", env.UIParent)
+    env.ReputationWatchBar:Hide()
+    local nativeShow, nativeHide = env.MainMenuExpBar.Show, env.MainMenuExpBar.Hide
+    local reputationShows = 0
+    local function ReputationShown() reputationShows = reputationShows + 1 end
+    env.ReputationWatchBar:SetScript("OnShow", ReputationShown)
     context:Load("modules/xprep/xprep.lua", "Xprep")
+    -- Exercise callbacks after acquisition and across generations. Lua 5.1 mocks
+    -- cover ownership behavior; native Lua 5.0 loop capture still needs client proof.
+    local retiredXPShow, retiredReputationHide = env.MainMenuExpBar.Show, env.ReputationWatchBar.Hide
+    env.MainMenuExpBar:Hide()
+    env.ReputationWatchBar:Show()
+    env.MainMenuBarPerformanceBarFrame:Hide()
+    assert(not env.ReputationWatchBar:IsShown(), "owned reputation Show escaped the XP owner")
+    display.BeginEdit()
+    display.Set("customActionBar", false)
+    assert(
+        not env.MainMenuExpBar:IsShown()
+            and env.ReputationWatchBar:IsShown()
+            and not env.MainMenuBarPerformanceBarFrame:IsShown(),
+        "native XP frames lost their independent latest Show/Hide requests"
+    )
+    assert(env.MainMenuExpBar.Show == nativeShow and env.MainMenuExpBar.Hide == nativeHide)
+    assert(env.ReputationWatchBar:GetScript("OnShow") == ReputationShown and reputationShows == 1)
+    retiredXPShow(env.MainMenuExpBar)
+    retiredReputationHide(env.ReputationWatchBar)
+    assert(
+        env.MainMenuExpBar:IsShown() and not env.ReputationWatchBar:IsShown(),
+        "retired XP callbacks did not forward"
+    )
+    env.ReputationWatchBar:Show()
+    display.Set("customActionBar", true)
+    retiredReputationHide(env.ReputationWatchBar)
+    assert(not env.MainMenuExpBar:IsShown() and not env.ReputationWatchBar:IsShown())
+    display.Set("customActionBar", false)
+    assert(
+        env.MainMenuExpBar:IsShown() and env.ReputationWatchBar:IsShown(),
+        "retired callback changed reacquired state"
+    )
+    env.ReputationWatchBar:Hide()
+    env.MainMenuBarPerformanceBarFrame:Show()
+    display.FinishEdit(false)
     local controller = context:Controller("PLAYER_XP_UPDATE")
     local bar = env.DFRL_XPBar
     local gain, spark
@@ -229,6 +272,21 @@ do
     context:Event(controller, "PLAYER_XP_UPDATE", "player")
     context:Call(controller, "OnUpdate", 0.01)
     assert(not context.writes.SetText, "unchanged XP rewrote the caption")
+    local nativeModePool = #context.objects
+    display.Set("customActionBar", false)
+    assert(not bar:IsVisible() and env.MainMenuExpBar:IsVisible(), "native action bar kept SDUI XP or hid native XP")
+    assert(not env.ReputationWatchBar:IsShown(), "native action bar enabled an originally hidden reputation bar")
+    assert(
+        display.Get("attachXP") and not controller:GetScript("OnUpdate"),
+        "native XP changed the saved attachment or retained work"
+    )
+    context:ResetCounts()
+    context:Event(controller, "PLAYER_XP_UPDATE", "player")
+    context:Call(controller, "OnUpdate", 0.2)
+    assert(not controller:GetScript("OnUpdate"), "native mode restarted the SDUI XP worker")
+    display.FinishEdit(false)
+    assert(bar:IsVisible() and not env.MainMenuExpBar:IsShown(), "Cancel did not restore custom XP ownership")
+    assert(#context.objects == nativeModePool, "switching XP owner allocated replacement regions")
     context.maximum = 0
     context:Event(controller, "PLAYER_XP_UPDATE", "player")
     context:Call(controller, "OnUpdate", 0.01)

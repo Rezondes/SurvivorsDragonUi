@@ -58,6 +58,13 @@ An explicit Bash shell enables `pipefail`, so piping fixture/model output into
 
 ## UI work and cleanup tests
 
+Action-bar choice cases use the production display/bar owners and explicit fake
+native frames. They cover default-on normalization, shared preview/Confirm/Cancel,
+profiles and resets, native presentation restoration, retained attachment
+choices with detached jewelry/counters, SDUI XP hiding, disabled dependent
+controls and both Performance Mode states. These cases remain CI-only and were
+not run locally; they do not prove native input or in-game appearance.
+
 The native API draft adds production-boundary fixtures for the v1 meter adapter,
 complete meter view, retained portrait circle helper, native language selection
 and live navigation. They cover all fourteen literal label sets, duplicate names
@@ -78,6 +85,22 @@ Native-language cases separate the native environment without `_G` from the
 addon initializer environment. They retain all fourteen catalogs, native errors,
 legacy fallback and deferred recovery when the capability endpoint is absent
 or appears after initialization.
+
+Native and legacy meter cases keep forward and reverse navigation within the
+four supported views in both Performance Mode states, even when incoming-damage
+categories are published. They reject category reads and retain native counters;
+the native API path keeps legacy packet intake detached. These cases remain
+CI-only and were not executed locally.
+
+Ability-rank cases add nine native ranks and a later upgrade, checking one
+combined row, amounts, available/unavailable rates, shares and sorting without
+changing native counters or checkpoints. They retain unrelated same-name
+sources, owner/proc/variant/item/talent distinctions, ambiguous same-rank
+families and missing-identity sources. Legacy duplicate cases exercise grouping
+before session Reset and rolling-rate observation. Metadata/language changes,
+pool reuse, hidden/off work and both Performance Mode states use the production
+owners over explicit fake boundaries. These cases are CI-only and were not
+executed locally; they do not prove native client behavior.
 
 The production banner fixture supplies an explicit `UIErrorsFrame.AddMessage`
 boundary and the generated fourteen-language native catalogs. Affix-warning

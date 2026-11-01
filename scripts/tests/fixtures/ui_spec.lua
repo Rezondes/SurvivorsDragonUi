@@ -327,6 +327,7 @@ Test("performance mode replaces range fades with static warnings and restores no
     assert(indicator:IsShown() and indicator:GetAlpha() == 0.5, "static mode lost the range warning")
     assert(context.writes.UIFrameFadeRemoveFrame == 1, "active native fade was not removed")
     assert(not context.writes.UIFrameFadeIn and not context.writes.UIFrameFadeOut, "static mode started a fade")
+    assert(not context.writes.SetScript, "static mode rebound the unchanged range updater")
     local allocated = #context.objects
     context:ResetCounts()
     context:Event(controller, "PLAYER_TARGET_CHANGED")
@@ -339,11 +340,44 @@ Test("performance mode replaces range fades with static warnings and restores no
     context:ResetCounts()
     context:SetSetting("performanceMode", false)
     assert(context.writes.UIFrameFadeIn == 1 and #context.objects == allocated, "normal fade did not reuse the warning")
+    assert(not context.writes.SetScript, "normal mode rebound the unchanged range updater")
     bar:Hide()
     context:ResetCounts()
     context:SetSetting("performanceMode", true)
     assert(not indicator:IsShown() and controller:GetScript("OnUpdate") == nil, "hidden bar resumed range work")
     context:NoPresentationWrites()
+end)
+
+Test("native action bar selection clears and suspends custom range decoration", function()
+    for _, performance in ipairs({ false, true }) do
+        local context = H.New()
+        local env = context.env
+        local bar = env.CreateFrame("Frame", nil, env.UIParent)
+        local button = env.CreateFrame("Button", nil, bar)
+        button.slot = 1
+        env.IsActionInRange = function()
+            context.reads.range = (context.reads.range or 0) + 1
+            return 0
+        end
+        env.DFRL.mainBar, env.DFRL.actionButtons = bar, { button }
+        context.settings.customActionBar, context.settings.performanceMode = true, performance
+        context:Load("modules/bars/range.lua", "RangeIndicator")
+        local controller = context:Controller("PLAYER_TARGET_CHANGED")
+        context:Event(controller, "PLAYER_TARGET_CHANGED")
+        local indicator, allocated = assert(button.rangeIndicator), #context.objects
+        assert(indicator:IsShown())
+        context:SetSetting("customActionBar", false)
+        assert(not indicator:IsShown() and not indicator.showing, "native bar retained custom range art")
+        assert(not controller:GetScript("OnUpdate"), "native bar kept the custom range updater")
+        context:ResetCounts()
+        context:Event(controller, "PLAYER_TARGET_CHANGED")
+        context:Call(controller, "OnUpdate", 1)
+        context:NoPresentationWrites()
+        assert(not context.reads.range and #context.objects == allocated, "native range events performed custom work")
+        context:SetSetting("customActionBar", true)
+        assert(indicator:IsShown() and controller:GetScript("OnUpdate"), "SDUI mode did not restore range warnings")
+        assert(#context.objects == allocated, "SDUI range restoration allocated another indicator")
+    end
 end)
 
 Test("performance mode keeps loot opaque until the original expiry and resumes in-flight fades", function()
