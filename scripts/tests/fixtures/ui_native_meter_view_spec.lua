@@ -1244,6 +1244,90 @@ Test("native meter keeps four views despite damage-taken publications in both Pe
     end
 end)
 
+Test("item casters share one row across pet options, hidden changes and both Performance Mode states", function()
+    for _, performance in ipairs({ false, true }) do
+        local c, state, env = View(function(context, native)
+            context.settings.performanceMode = performance
+            native.records = helpers.ItemCasters()
+        end)
+        local first, allocated = c:Row(1), #c.objects
+        local identity = first.entry.rowId
+        assert(first.name:GetText() == "The Eye of Hakkar 2" and first.entry.dmg == 150)
+        assert(first.icon:GetTexture() == "Interface\\Icons\\hakkar-rank-2")
+        assert(not env.SurvivorsDragonUiMeterIcon2, "item casters allocated separate displayed rows")
+        c:SetSetting("meterGroupPets", true)
+        c:Tick()
+        assert(first.entry.rowId == identity and first.entry.dmg == 150 and #c.objects == allocated)
+        assert(first.name:GetText() == "The Eye of Hakkar 2", "pet summary replaced the item caption")
+        c:ResetCounts()
+        c:Tick()
+        c:NoPresentationWrites()
+        c:SetLayoutHidden(true)
+        state.records[4].actorId, state.records[4].amount = "searing-replacement", 45
+        state.context.counterRevision = "hidden-item-caster"
+        c:SetSetting("meterGroupPets", false)
+        local snapshots = state.calls.snapshot
+        c:ResetCounts()
+        c:Tick()
+        assert(state.calls.snapshot == snapshots, "hidden item caster change fetched a snapshot")
+        c:NoPresentationWrites()
+        c:SetLayoutHidden(false)
+        c:Tick()
+        assert(first.entry.rowId == identity and first.entry.dmg == 155 and #c.objects == allocated)
+        assert(first.name:GetText() == "The Eye of Hakkar 2" and not env.SurvivorsDragonUiMeterIcon2)
+        c:SetSetting("meterEnabled", false)
+        snapshots = state.calls.snapshot
+        c:ResetCounts()
+        c:Tick()
+        assert(state.calls.snapshot == snapshots and not c.controller:GetScript("OnUpdate"))
+        c:NoPresentationWrites()
+    end
+end)
+
+Test("growing historical totem ledgers retain pooled rendering and native resets in both modes", function()
+    for _, performance in ipairs({ false, true }) do
+        local c, state, env = View(function(context, native)
+            context.settings.performanceMode = performance
+            native.records, native.extraSources = helpers.TotemItems(120)
+        end)
+        local first, allocated = c:Row(1), #c.objects
+        local identity = first.entry.rowId
+        assert(first.entry.dmg == 1200 and first.name:GetText() == "The Eye of Hakkar 1")
+        assert(not env.SurvivorsDragonUiMeterIcon2, "historical totems expanded the visible row pool")
+        c:SetSetting("meterGroupPets", true)
+        c:Tick()
+        assert(first.entry.rowId == identity and first.entry.dmg == 1200)
+        c:ResetCounts()
+        c:Tick()
+        c:NoPresentationWrites()
+        state.records, state.extraSources = helpers.TotemItems(180)
+        state.context.counterRevision, state.context.metadataRevision = "more-totem-damage", "more-totem-actors"
+        c:Tick()
+        assert(first.entry.rowId == identity and first.entry.dmg == 1800 and #c.objects == allocated)
+        c:SetLayoutHidden(true)
+        state.records, state.extraSources = helpers.TotemItems(240)
+        state.context.counterRevision, state.context.metadataRevision = "hidden-totem-damage", "hidden-totem-actors"
+        local snapshots = state.calls.snapshot
+        c:ResetCounts()
+        c:Tick()
+        assert(state.calls.snapshot == snapshots)
+        c:NoPresentationWrites()
+        c:SetLayoutHidden(false)
+        c:Tick()
+        assert(first.entry.rowId == identity and first.entry.dmg == 2400 and #c.objects == allocated)
+        env.DFRL.ResetMeterStats()
+        state.context.asOfRunSeconds = 22
+        c:Tick()
+        assert(first.entry.dmg == 720 and #c.objects == allocated, "totem optimization changed native Reset amounts")
+        c:SetSetting("meterEnabled", false)
+        snapshots = state.calls.snapshot
+        c:ResetCounts()
+        c:Tick()
+        assert(state.calls.snapshot == snapshots and not c.controller:GetScript("OnUpdate"))
+        c:NoPresentationWrites()
+    end
+end)
+
 Test("item rank upgrades reuse native artwork and hidden lifecycle in both Performance Mode states", function()
     for _, performance in ipairs({ false, true }) do
         local c, state, env = View(function(context, native)

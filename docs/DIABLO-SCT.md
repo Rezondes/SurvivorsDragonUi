@@ -268,16 +268,24 @@ and **Diablo IV** use this path. MSBT retains its independent Layout stream.
 ## Native world anchors
 
 On builds exposing the complete version 1
-[combat-text world-anchor API](COMBAT-TEXT-WORLD-ANCHOR-API-PROPOSAL.md), Over
+[combat-text world-anchor API](AzerothSurvivors-Addon-API.md#world-anchored-combat-text-version-1), Over
 enemies and Diablo IV consume native hit identities and use `follow` anchors.
 After an enemy dies, its numbers stay over the retained death location in the
 world as the player moves, rotates the camera or zooms. Each frame uses a fresh
-native camera projection; the numbers keep their normal animation and expiry.
+native camera projection inside `AZS_RegisterCombatTextFrameHandler`, after the
+camera moves. Only `frameCurrent = true` projections place the numbers, which
+keep their normal animation and expiry. Ordinary `OnUpdate` never also moves
+native labels.
 Looking away hides them, and looking back can reveal only their remaining life.
 Offscreen and missing projections never reuse old screen coordinates.
 
-Distance sizing uses native camera depth: up to 20 yards retains the selected
-SCT size, farther text shrinks to a minimum of 55%. Existing animation scale and
+**Scale damage by distance** in Combat text is off by default. Turn it on to make
+distant numbers smaller. Off keeps your selected SCT size at every distance; world/death-location tracking stays
+active. The choice previews immediately, saves with Confirm and follows Cancel,
+profiles and both full resets. MSBT dims the control while retaining its value.
+
+When enabled, distance sizing uses native camera depth: up to 20 yards retains
+the selected SCT size, farther text shrinks to a minimum of 55%. Existing animation scale and
 critical pop multiply that factor. Both Performance Mode states share the
 projection, size and visibility behavior, retaining their 75/300 ms grouping
 rules. Separate native targets/casters cannot share an arbitrary anchor.
@@ -286,8 +294,12 @@ MSBT remains independent of world anchors.
 The addon feature-detects and validates the complete provider. Old builds keep
 the nameplate behavior below. A failing selected native provider hides/retires
 its custom labels and retries that transport without duplicating parsed-chat
-hits. The game must implement the proposed provider; this consumer alone
-cannot create native world anchors or establish their packaged-game availability.
+hits. Native spell identity uses the documented `spellId`; no `basicAttack` or
+`abilityKey` field is required. Native miss words stay literal; a missing word
+skips only that notice. Handler ownership follows mode/style/world/reload
+cleanup and is shared by both Performance Mode states. See the
+[integration notes](COMBAT-TEXT-WORLD-ANCHOR-API-PROPOSAL.md). Live engine behavior
+remains unverified.
 
 ## Native nameplate layout and retirement
 

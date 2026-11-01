@@ -67,14 +67,28 @@ world cleanup in both Performance Mode states. These cases remain CI-only and
 were not run locally; they do not prove native tooltip rendering or event order.
 
 Native world-SCT cases run the actual adapter and controller over explicit fake
-capability/event/projection endpoints. They cover native-only intake, one-shot
+capability/event/projection/registration endpoints. Their ordinary and post-camera
+frame phases are separate. They cover native-only intake, one-shot
 anchors without plates, camera movement after death, living/dead offscreen
 hiding and remaining-life recovery, bounded distance scaling, distinct native
 targets/casters, both grouping modes, malformed/throwing responses, retry
 throttling, stream retirement, MSBT/legacy fallback and off/world cleanup.
+Documented-shape cases omit `basicAttack`/`abilityKey`, group by native `spellId`,
+preserve literal native miss words and accept absent miss captions without
+rejecting other hits. Cases require `frameCurrent = true`, reject early-phase
+native reads/positioning, retain one handler across Performance Mode changes,
+and cover partial registration, failed release, hidden/retired callbacks and
+style/mode/world/reload cleanup without affecting foreign handlers.
 They add no runtime hook or shipped fixture. Cases are CI-only and were not run
 locally; mocks cannot establish native death-position capture, camera-update
 ordering, provider availability, appearance or FPS.
+
+Distance-choice cases retain default-off normalization and explicit saved choices,
+preview/Confirm/Cancel, older/named profiles and resets. Production-controller
+comparisons toggle sizing in both enemy styles and Performance Mode states while
+retaining death anchors, motion, fade, expiry, pooled objects and frame ownership.
+Editor cases cover the actual checkbox/search target, hint, final filter extent,
+MSBT/mode dependencies and hidden/unchanged writes. These remain CI-only.
 
 Meter processing cases exercise growing native source/member lists through the
 production adapter and controller. Fixture-only counters check that ordinary
@@ -89,6 +103,16 @@ manual Reset contexts, hidden/off work and both Performance Mode states. Legacy
 cases retain complete rolling observations while another meter tab is visible
 and same-publication Party rate validation. These cases are CI-only and were
 not run locally; operation counts do not establish native snapshot cost or FPS.
+
+Totem-ledger cases count native member/origin ID reads with explicit array
+boundaries over 120–180 records, including first preparation and appended actors.
+Malformed keys, sparse/non-string lists and recovery must preserve conservative
+talent attribution without needing a metadata revision. Aliased display/recent
+or average rates avoid duplicate validation; separately returned malformed rates
+still fail, with and without checkpoints. Full-controller cases grow to 240
+historical totem actors while retaining one item row, native totals, Reset,
+pet-summary choices, pooling, unchanged work and hidden/off cleanup in both modes.
+These cases are CI-only and do not measure native allocation, history cost or FPS.
 
 Native history-cadence cases count positive-window and zero-window queries
 through the production adapter/controller. They cover shared one-Hz regular
@@ -191,11 +215,15 @@ snapshot, patched live appearance or FPS.
 
 Item-rank cases add differing rank-specific item IDs under one explicit item
 key, direct and item-bound sources, single actual-origin joins, independent
-components and item copies. They retain unknown/mixed origins, same-rank
-ambiguity, caster/owner/proc/variant/talent distinctions and original native
-records. They cover highest-rank captions/artwork readiness, missing rates,
-Reset, zero-display historical members, repeated pet sources, unchanged reuse,
-hidden/off work and both Performance Mode states. These cases remain CI-only
+components and item copies. Cross-caster cases combine player, pet, summon and
+totem item damage with both pet-summary choices, retaining native records and
+bounded caster diagnostics. They cover counter changes, reordered/replaced
+casters, Reset, zero-to-positive contributions, unavailable rates and pooled
+visible/hidden/off reuse in both Performance Mode states. They retain unknown
+or mixed origins, same-rank ambiguity, owner/proc/variant/talent distinctions,
+exact member-caster joins and original native records. Other cases cover
+highest-rank captions/artwork readiness, zero-display historical members and
+unchanged reuse. These cases remain CI-only
 and were not executed locally; no live Eye of Hakkar snapshot was available.
 
 Pet meter cases add explicit recorded hero/pet/summon/totem actors, overlapping

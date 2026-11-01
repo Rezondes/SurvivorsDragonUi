@@ -96,12 +96,19 @@ cases were authored and not run locally; this is no measured rendering or FPS
 result.
 
 Item-rank summaries reuse this same family/row pool and instant presentation.
-Direct native item keys avoid name or equipment lookups. Item-bound effects can
-join one actual item origin per positive member through the incremental member
+Matching item families share one row across player, pet, summon and totem
+casters before optional pet summaries. Only the item display key omits the
+caster; native pool members retain their actor/source metadata for the existing
+bounded hover. Changed preparation retains one scalar item-family caption so
+ambiguous fallback rows keep their caster suffixes. Counter-only passes reuse
+the accepted family and caption. Direct native item keys avoid name or equipment
+lookups. Item-bound effects can join one actual item origin per positive member through the incremental member
 and contribution-position caches below. No recursive relationship walk, native
 getter, animation, frame, region, asset, event, updater, setting or saved data is
-added. Hidden/off retirement remains shared. CI-only source mocks were authored
-but not run locally; live Hakkar metadata and rendering remain unverified.
+added. Hidden/off retirement remains shared. CI-only source mocks cover caster
+sums, pet-summary precedence, conservative boundaries, resets, unavailable rates
+and pooled visible/hidden reuse in both modes. They were authored but not run
+locally; live Hakkar metadata and rendering remain unverified.
 
 Talent-rank summaries reuse the same pool and publication/member caches.
 Direct talent keys and accepted actual-origin talent keys normalize only during
@@ -192,6 +199,22 @@ item origin. Source identities and families retire with their existing view and
 run owners. There are still at most four native view caches; their size follows
 the native ledger rather than the number of visible bars.
 
+Member and positive-origin ID arrays are validated and fingerprinted together
+in one pass over each received list. Dense-array checks still reject bad keys,
+holes and non-string IDs; invalid lists clear their accepted fingerprints.
+Exact source/owner/caster/proc joins, zero-to-positive transitions and origin
+changes are checked on every pass, with the existing safe reindex fallback.
+Changed talent/item preparation reads those same-snapshot scalar fingerprints
+instead of revalidating raw lists and rebuilding a temporary ID-to-contribution
+map. No leaf Stats, duplicate member-position field or new per-source cache is
+retained. Native descriptor validation and conservative ambiguity remain intact.
+
+When a native Stats record uses the exact same rate table for `displayRate`
+and its selected recent or average rate, validate that table once. Separately
+returned rate tables still receive full independent validation, including
+checkpoint averages, unavailable rates and native window status. This removes
+redundant addon work only; it does not change requested rates or native history.
+
 The meter controller copies and samples only its visible viewport, retaining the
 complete source ordering for scrolling, ranks, shares and the leading bar.
 Displayed-rate caches retire offscreen identities instead of retaining every
@@ -229,7 +252,11 @@ queries on extra reads within a second. Full snapshot materialization is still
 required. Query counts do not measure the native
 snapshot producer's cost or FPS. CI-only operation-count and lifecycle cases
 cover growing ledgers, cache invalidation, viewport work, native history cadence
-and early row-piece gates. No local tests, game execution, late-run frame timings
+and early row-piece gates. Additional cases count received ID reads across
+120–180 totem records, exercise malformed-list recovery and aliased/copied rate
+validation, and grow the full controller to 240 historical totems through
+pet grouping, hidden/off cleanup and Reset in both Performance Mode states.
+No local tests, game execution, late-run frame timings
 or FPS measurements were performed.
 
 ## Meter hover IDs
@@ -391,10 +418,20 @@ rendering remain unverified. See [FONTS.md](FONTS.md).
 ## Native world combat text — 2026-11-01
 
 The optional version 1 consumer reuses the original SCT controller and pooled
-holders, with no additional frame, region, asset, event, updater or SavedVariable.
+holders, with no additional frame, region, asset, event or SavedVariable.
 It selects one native transport for enemy-origin styles and releases the forced
 invisible plate feed; ordinary user-requested nameplate styling stays active.
 MSBT and unsupported builds retain their established paths.
+
+One addon-owned `AZS_RegisterCombatTextFrameHandler` callback replaces the native
+text work formerly done in `OnUpdate`. Native event intake, pending groups,
+projection and animation run only after camera movement, with `frameCurrent = true`
+and a coherent sample across chunks. The existing `OnUpdate` retains metadata,
+plate styling and bounded pending handoff cleanup; it never also animates native
+labels. There is no separate idle effect updater. Off, MSBT, world leave/logout
+and reload release only the owned callback; partial failures leave it inert and
+retry through the existing controller at half-second intervals, including
+pending release outside the world. Performance Mode changes do not re-register.
 
 An enabled native consumer reads at most 256 events in one frame and retains a
 bounded 4096-ID duplicate window. It copies only accepted hit fields/handles;
@@ -403,6 +440,10 @@ in batches of at most 256 with one coherent camera sample across chunks. Empty
 active lists do no native projection or animation work. Off/hidden/world-retired
 consumers do not read the native event feed. Native failures retire presentation
 and throttle re-priming to half-second retries through the existing controller.
+Payload validation uses the supplied contract's `spellId` and native attack
+categories, without proposed-only `basicAttack` or `abilityKey` dependencies.
+Missing native miss wording skips that event's presentation before queue work;
+it does not discard valid damage, re-prime the stream or invent a caption.
 
 Current-camera world projection, offscreen hiding and bounded depth scaling are
 identical in both Performance Mode states. Distance multiplies the existing
@@ -411,11 +452,27 @@ labels keep expiring while skipping font/geometry/animation writes; they do not
 restart on reappearance. The original 75 ms duplicate suppression and Performance
 Mode's 300 ms same-attack sums remain distinct and preserve original hit amounts.
 
+The default-off `sctDistanceScaling` display choice lets players enable that
+distance factor. Off keeps current-camera/death-location tracking and the
+selected SCT size. Missing/invalid values and both full resets select off;
+explicit saved choices, profiles and the existing preview/Confirm/Cancel/discard
+lifecycle are retained. The existing listener caches the choice; the next owned
+post-camera pass applies it without resetting hits, lifetimes or handler ownership.
+Off skips the factor calculation. Hidden/off consumers retain their deferred
+work rules, and both Performance Mode states share the same choice.
+
+The lazy Combat text page adds one standard button, four texture regions and
+two FontStrings for the caption/hint, using existing checkbox artwork. Its row
+and the shifted filters stay in the existing scroll viewport. No gameplay
+region, asset, event, updater or separate SavedVariable is added. Search reuses
+the same metadata; MSBT disables/dims the control while retaining its value.
+
 CI-only production-boundary cases cover these paths, errors and cleanup. They
 were not run locally and establish neither native API availability/cost nor live
 camera alignment, late-run FPS or appearance. See the
-[provider proposal](COMBAT-TEXT-WORLD-ANCHOR-API-PROPOSAL.md) for the required
-death-anchor, event ordering and current-frame sampling guarantees.
+[supplied provider contract](AzerothSurvivors-Addon-API.md#world-anchored-combat-text-version-1)
+and [integration notes](COMBAT-TEXT-WORLD-ANCHOR-API-PROPOSAL.md) for death-anchor,
+event ordering and current-frame sampling guarantees.
 
 ## Diablo IV combat text — 2026-10-30
 
