@@ -47,7 +47,9 @@ rejects it or supplies no texture. Successful and failed bindings retain the
 existing identity/artwork cache and hidden/off deferral.
 
 The supplied 0.139.0 changelog also adds combat-text `meterSource` and
-`meterSourceKey`. The native SCT adapter retains valid optional values and
+`meterSourceKey`; the [API supplement](API-NOTES.md#combat-text-meter-attribution--01390-2026-11-02)
+documents their meanings, meter-key matching and borrowed-spell/pet/summon cases.
+The native SCT adapter retains valid optional values and
 includes the exact received key in its existing identity. Performance Mode
 therefore separates different credited sources even when they borrow the same
 spell; captions alone never separate or join hits. Missing or unusable optional
@@ -61,7 +63,51 @@ review and pinned formatting only. No local tests, standalone validation or
 addon/game execution is performed; actual native/browser appearance remains
 unverified.
 
-### Native startup dropdown error
+### Escape menu ownership
+
+Azeroth Survivors has its own pause menu with **Back**, **Options**, **End Run**
+and **Quit game**. The stock Wenilla/FrameXML `GameMenuFrame` is a separate
+window with **Options**, **Support**, **Macros**, **Logout** and **Exit Game**.
+The supplied screenshots show both at once. The user reports that clicking
+AS **Options** opens settings and also ends the run.
+
+The earlier compatibility change returned before suppressing `GameMenuFrame`.
+That exposed the stock menu under the AS menu. Its presence was established,
+but the previous CI fixture only retained a mock native handler; it did not
+model two overlapping menus or their destructive controls. The exact native
+logout/exit intent in the reported session was not captured.
+
+On AS clients exposing the newer stock menu markers
+`BenillaGameMenuButtonEditMode` or `BenillaGameMenuButtonSupport`, the Menu
+module now permanently suppresses only `GameMenuFrame`, using the existing
+shared Show/OnShow guards. It releases stock panel ownership through native
+`HideUIPanel` when available, then filters only that frame from `ShowUIPanel`
+before the panel manager can claim a slot. Other panels are forwarded to the
+original function with their arguments and return values preserved. Missing
+modern Options controls or delayed AS API initialization do not enable another
+menu.
+
+The native `ToggleGameMenu` close ladder, settings wrappers and AS-owned pause
+menu remain untouched. SDUI creates no replacement menu or Layout registration
+on this path. Saved legacy menu geometry stays available only to the older
+fallback. The native AS menu remains reachable through Escape; there is no
+documented Lua bridge for opening it through the player-portrait shortcut, and
+that shortcut must not reveal the stock menu instead.
+
+Older kits without these adapter markers retain the existing replacement and
+its Escape/settings behavior. Both Performance Mode states use the same
+initialization-only path, with no new setting, SavedVariable, frame, region,
+asset, event or updater.
+
+CI-only mocks first reproduce one pointer click reaching AS Options and a
+visible stock Logout control. They then cover suppression, direct and retained
+native Show attempts, panel-manager exclusion, AS Options isolation, ordinary
+panel arguments/returns and cleanup, native Escape identity, partial modern
+kits, legacy fallback and both Performance Mode states. No local tests or game
+execution were performed. Actual native input dispatch and run preservation
+remain unverified. This is separate from the startup dropdown error below.
+
+### Native startup dropdown recovery
 
 The reported `UIDropDownMenu.lua:156` error matches the stock 1.12.1
 [button-overflow branch](https://github.com/tekkub/wow-ui-source/blob/1.12.1/FrameXML/UIDropDownMenu.lua#L149-L158):
@@ -69,14 +115,55 @@ after the 32-button limit, its diagnostic concatenates a nil
 `UIDROPDOWNMENU_OPEN_MENU`. The user reports it immediately during loading.
 Wenilla loads the stock
 [core and layer before third-party addons](https://github.com/Arnesen/wenilla/blob/407a76e83d03ba6e0a755a5a89b564c80e16025d/crates/benilla-app/src/ui_script/lifecycle.rs#L557-L627),
-so an SDUI hook cannot prevent an error already raised in that startup path.
+so the original call can fail before SDUI runs. The native initializer is
+assigned before its callback, however, and remains available for recovery.
 
-This remains a client issue. The exact overflowing native menu needs the
-client's startup traceback; screen-resolution enumeration is one candidate,
-not an established caller. The engine repair must make the diagnostic nil-safe
-and build oversized native choices safely before stock initialization, retaining
-their actual selection IDs. SDUI does not hide the popup, truncate choices,
-invent an open-menu owner or modify client files.
+This failure need not affect every installation. The public engine's
+[resolution catalog](https://github.com/Arnesen/wenilla/blob/407a76e83d03ba6e0a755a5a89b564c80e16025d/crates/benilla-app/src/video.rs#L583-L645)
+uses connected monitors, their reported modes and scale, plus the current window
+size. Different setups can therefore produce different dropdown lengths. The
+same nil-concatenation error is also
+[documented with oversized resolution lists in other clients](https://github.com/jhinzuo/another.ScreenResolutionDropdownFix#fix-the-uidropdownmenu_open_menu-error).
+This makes display enumeration a supported hypothesis, not proof of the exact
+overflowing control or received choice count in the reported game session.
+
+`core/dropdowns.lua` now installs an addon-side compatibility path at file load,
+after the existing error handler and core. It requires the complete native
+three-level, 32-button kit and feature-detects mouse-wheel ownership. Oversized
+initializers retain at most 512 shallow-copied choice records per level and
+render through the existing 32 buttons. Wheel input moves through all retained
+choices, closes obsolete submenus and keeps original selection IDs, values,
+callback arguments and native row placement. Ordinary menus retain their native
+path. The global pool size, video getters/setters and saved settings do not change.
+
+The addon restores previous wheel handlers and flags on hiding or replacement,
+preserving later foreign ownership. Native initializer errors still propagate.
+Choice records remain bounded until that shared level is rebuilt; selected
+name/value lookups use a changed-only cache. No frame, region, asset, event,
+updater, setting, SavedVariable or runtime test hook is added.
+
+For a visible popup matching this exact file, line, global and nil-concatenation
+message, and only while no dropdown is open, startup recovery can replay recognized native resolution, refresh-rate
+and multisample setup when their supplied lists exceed 32 choices. Recognized
+Benilla options entry rows can recover through their own setup function, with a
+one-time enumeration capped at 4096 frames. These setup paths only rebuild UI;
+they do not apply a resolution, refresh rate or other video setting.
+
+The stale popup is retired only after a recognized oversized initializer has
+completed through the paged path and its text remains unchanged. Unrecognized,
+unrelated, incomplete or failed recoveries leave it visible. New failures go to
+the existing error handler; no broad message or error-handler suppression is
+introduced. Without an identified startup control, the exact initial caller
+still needs a client traceback. A native engine repair remains useful, but is
+not required for addon-side recovery of these recognized paths.
+
+CI-only fixtures reproduce the original overflow before loading production
+compatibility code, then cover paging, original IDs/callbacks, physical row
+placement, value/name selection, submenu closure, wheel ownership, both startup
+recovery families and untouched/error cases. Local tests and game execution
+remain unauthorized; recovery in the packaged client remains unverified.
+
+## Earlier engine updates
 
 The reported regression followed the Azeroth Survivors client update. The supplied changelog identifies 0.101.0 as the move to a newer client and Lua 5.0 behavior. The screenshots show `SetText(): Font not set` in the player and target modules, an incomplete layout entry at `core/layout.lua:730`, and the client's 48 MB script-memory popup. They do not establish the exact engine commit packaged by the game or the allocation responsible for the memory popup.
 

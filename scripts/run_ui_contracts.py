@@ -28,6 +28,10 @@ def main():
             "COOLDOWN_INTERVAL", "COOLDOWN_ZERO", "COOLDOWN_FINAL_WINDOW", "COOLDOWN_UNITS",
             "FormatCooldown", "UpdateCooldownNumber", "CreateCooldownNumbers",
         ])
+        jewelry_cache = extract_source("modules/ui/jewelry.lua", [
+            "InvalidateEffects", "ReadEffects", "ClearSlot", "PaintIcons",
+        ])
+        jewelry_cache = jewelry_cache.rsplit("\nreturn ", 1)[0] + "\nreturn { InvalidateEffects = InvalidateEffects, ReadEffects = ReadEffects, ClearSlot = ClearSlot, PaintIcons = PaintIcons }\n"
         run_hud = "local render, refreshRows, scheduleCache = {}, false, nil\n" + extract_source("modules/ui/run.lua", [
             "nativeParts", "TakeOver", "Restore", "SyncReplacements",
         ])
@@ -136,6 +140,7 @@ def main():
             ("settings-views-source.lua", settings_views, "ui_settings_visibility_spec.lua"),
             ("run-hud-source.lua", run_hud, "ui_shared_rules_spec.lua"),
             ("cooldown-source.lua", cooldown, "ui_spec.lua"),
+            ("jewelry-cache-source.lua", jewelry_cache, "ui_jewelry_cache_spec.lua"),
             ("guardian-hover-source.lua", guardian_hover, "ui_guardian_hover_spec.lua"),
             ("guardian-timers-source.lua", guardian_timers, "ui_guardian_timer_spec.lua"),
             ("border-modes-source.lua", border_modes, "ui_border_spec.lua"),
@@ -173,7 +178,7 @@ def main():
                     source_file.write_text(body, encoding="utf-8")
                     command.append(str(source_file))
             run_fixture(command, fixture)
-        for fixture in ("ui_artwork_strip_spec.lua", "ui_fonts_spec.lua", "ui_retail_edit_spec.lua", "ui_retail_layout_spec.lua", "ui_default_chat_spec.lua", "ui_health_spec.lua", "ui_player_absorb_spec.lua", "ui_mini_health_spec.lua", "ui_sct_spec.lua", "ui_sct_areas_spec.lua", "ui_native_sct_api_spec.lua", "ui_nameplates_spec.lua", "ui_marks_spec.lua", "ui_meter_party_spec.lua", "ui_native_meter_api_spec.lua", "ui_native_meter_view_spec.lua", "ui_native_portrait_circle_spec.lua", "ui_native_language_spec.lua", "ui_live_position_api_spec.lua", "ui_party_waypoint_spec.lua", "ui_banners_perf_spec.lua", "ui_layout_spec.lua", "ui_pets_totems_spec.lua", "ui_guardian_tracker_perf_spec.lua", "ui_revive_perf_spec.lua", "ui_core_idle_cadence_spec.lua", "ui_cooldown_lifecycle_spec.lua", "ui_default_action_bar_spec.lua", "ui_tooltip_style_perf_spec.lua", "ui_target_color_perf_spec.lua", "ui_target_classification_spec.lua", "ui_passive_cadence_spec.lua", "ui_projection_cache_perf_spec.lua", "ui_sct_metadata_perf_spec.lua"):
+        for fixture in ("ui_menu_native_spec.lua", "ui_dropdown_compat_spec.lua", "ui_artwork_strip_spec.lua", "ui_fonts_spec.lua", "ui_retail_edit_spec.lua", "ui_retail_layout_spec.lua", "ui_default_chat_spec.lua", "ui_health_spec.lua", "ui_player_absorb_spec.lua", "ui_mini_health_spec.lua", "ui_sct_spec.lua", "ui_sct_areas_spec.lua", "ui_native_sct_api_spec.lua", "ui_nameplates_spec.lua", "ui_marks_spec.lua", "ui_meter_party_spec.lua", "ui_native_meter_api_spec.lua", "ui_native_meter_view_spec.lua", "ui_native_portrait_circle_spec.lua", "ui_native_language_spec.lua", "ui_live_position_api_spec.lua", "ui_party_waypoint_spec.lua", "ui_banners_perf_spec.lua", "ui_layout_spec.lua", "ui_pets_totems_spec.lua", "ui_guardian_tracker_perf_spec.lua", "ui_revive_perf_spec.lua", "ui_core_idle_cadence_spec.lua", "ui_cooldown_lifecycle_spec.lua", "ui_default_action_bar_spec.lua", "ui_tooltip_style_perf_spec.lua", "ui_target_color_perf_spec.lua", "ui_target_classification_spec.lua", "ui_passive_cadence_spec.lua", "ui_projection_cache_perf_spec.lua", "ui_sct_metadata_perf_spec.lua"):
             run_fixture(["lua5.1", "scripts/tests/fixtures/" + fixture], fixture)
     if failures:
         print("Failed UI fixtures:", file=sys.stderr)

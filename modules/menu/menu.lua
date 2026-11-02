@@ -1,4 +1,22 @@
 DFRL:NewMod("Menu", 1, function()
+    -- AS owns its pause menu outside FrameXML. The newer stock menu can open
+    -- underneath it and receive the same click, including Logout/Exit Game.
+    local stockMenu, showPanel = GameMenuFrame, _G.ShowUIPanel
+    if
+        stockMenu
+        and type(showPanel) == "function"
+        and (BenillaGameMenuButtonEditMode or BenillaGameMenuButtonSupport)
+    then
+        if type(_G.HideUIPanel) == "function" then _G.HideUIPanel(stockMenu) end
+        PermanentlyDisableFrame(stockMenu)
+        -- Stop before the panel manager claims a slot for the suppressed menu.
+        -- Keep the native Escape close ladder and every other panel untouched.
+        _G.ShowUIPanel = function(frame, force)
+            if frame == stockMenu then return end
+            return showPanel(frame, force)
+        end
+        return
+    end
     KillFrame(GameMenuFrame)
     -- OptionsFrame is the original client's Video Options window. Newer
     -- benilla builds expose their complete game settings as BenillaOptionsFrame.

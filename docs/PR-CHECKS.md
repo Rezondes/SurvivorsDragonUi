@@ -15,8 +15,28 @@ unchanged writes. Navigation covers old zero-valued and new texture-height map
 returns; party portraits cover object and legacy-name forms. Native SCT cases
 separate equal-caption borrowed spells by received meter source keys, retain
 same-key sums and accept older events without optional attribution. These cases
-do not establish packaged-client appearance or repair native FrameXML errors
-that occur before addon loading.
+do not establish packaged-client appearance.
+
+The separate native-dropdown fixture reproduces the stock 32-button overflow
+before loading production compatibility code. It covers bounded paging through
+the existing pool, physical row placement with original selection IDs, callback
+arguments, value/name selection, submenu closure, wheel-handler restoration,
+foreign ownership, recognized stock/Benilla startup setup and unrelated,
+unrecognized, failed or partial paths. It runs only in CI over fake native
+boundaries. It does not prove recovery in the packaged game or change the
+project's local-execution restriction.
+
+The native-menu fixture loads the production Menu module over explicit fake
+client controls. It first reproduces an overlapping AS Options/stock Logout
+click, then requires suppression of the stock layer while AS Options remains
+usable. Stock menu requests cannot reach the panel manager; direct and retained
+native Show calls cannot expose its buttons. Native Escape handler identity and
+arguments/returns, other panel arguments/returns and cleanup, settings wrappers,
+zero replacement allocation and later foreign Escape ownership are covered.
+Modern kits with missing Options controls still suppress the stock menu; older
+kits retain the legacy fallback. Both Performance Mode states share these cases.
+These are CI-only ownership/input-boundary checks. They do not execute client
+code or prove actual native hit testing, AS settings behavior or run preservation.
 
 ## What fails a PR
 
@@ -68,6 +88,17 @@ An explicit Bash shell enables `pipefail`, so piping fixture/model output into
 `tee` cannot hide a failing check.
 
 ## UI work and cleanup tests
+
+Jewelry cache cases use the exact production reader/cache/compositor functions
+over fake native tooltip and texture boundaries. They cover unchanged successful
+reads, same-icon item replacement, inventory/language invalidation, missing or
+throwing links/items, empty-row retries, slot retirement and reusable grouping
+records/regions with unchanged supplied crops. Pet-controller cases cover
+Layout-hidden sleep, deferred SCT icon learning, choice/run recovery and fresh
+Show data. Meter-controller cases cover zero view construction before first
+enable, immediate preview, disabled Reset and reuse after toggling, in both
+Performance Mode states. These remain CI-only; no local tests or game execution
+are authorized, and mocks do not establish native timing, pixel parity or FPS.
 
 Shared-tooltip cases load the production controller over explicit native owner,
 content-clear, visibility and scale boundaries. They cover Tooltip hiding/scaling
