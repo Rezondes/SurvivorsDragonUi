@@ -38,6 +38,15 @@ kits retain the legacy fallback. Both Performance Mode states share these cases.
 These are CI-only ownership/input-boundary checks. They do not execute client
 code or prove actual native hit testing, AS settings behavior or run preservation.
 
+Stored-level cases keep `UnitClass("player")` fixed to a different character
+while changing received run classes. They cover Warlock-to-Hunter switching,
+next-frame zone receipt, missing/malformed metadata, unchanged crop writes,
+zero-count reuse, hidden recovery, ready/world retirement, same-run recovery
+after dead/victory and a fresh zone received before playing. Count and click
+behavior remain available while class metadata is pending. Both Performance Mode states use
+the production controller over fake native boundaries. These cases are authored
+for CI only; they do not establish native publication timing or rendering.
+
 ## What fails a PR
 
 - Prettier or StyLua formatting differences, or a missing TOC version increment
@@ -1185,8 +1194,34 @@ Cache/ally styling cases in both Performance Mode states require the reused
 native request to carry the same `offset = { z = 5 }` table for caches and
 fallen allies, with no offset for encounters. A changed fake camera projection alters the five-yard point without
 an added screen gap or metadata query. Pooled cache → ally → boss → cache views
-retain one frame while restoring 22.4/32-unit sizes and existing encounter
-spacing. Cache → ally reuse issues no redundant size writes. Settled frames
+retain one frame while restoring 22.4/29.12/32-unit sizes and existing encounter
+spacing. Cache → ally reuse resizes exactly once to the 30%-larger ally icon.
+Settled ally and cache frames
 issue no size/placement writes. Missing world-offset support omits cache and
 ally icons while leaving encounter markers usable. These cases
 are CI-only; no local tests, validation or game execution were run.
+
+World-icon distance/fade cases are authored for CI only. Native marker fixtures
+exercise independent Always/Nearby/Distant choices, inclusive/exclusive cutoff
+boundaries, fractional distance, unchanged camera frames, absent/unadvertised
+hero metrics, affordability conjunction and stable callback/capability/pool
+counts. Fade cases sample 0/60/120+ ms opacity, reverse direction without an
+opacity jump, settle active fades when Performance Mode is enabled and clear
+stale/offscreen presentation immediately. Fully hidden out-of-band markers do
+no texture/placement/alpha writes. Both modes share query counts.
+
+Display cases cover finite 5–200-yard bounds, default Always/40 for missing or
+invalid/older profiles, rejected mode values, preview/Cancel/Confirm, profile
+copies and reset during preview. Editor cases cover both Map subsections,
+master-disabled mode/cutoff controls, retained choices, five-yard stepping,
+Always-disabled cutoffs and searchable mode captions. All fourteen source and
+runtime catalogs contain the new captions. No runtime test hook or client
+execution is added; these mocks do not establish native appearance or FPS.
+
+Guidance-default cases require missing/invalid cache, guardian and fallen-ally
+HUD/minimap preferences to normalize to off, while explicit saved on choices
+remain on. Reset restores guidance off without changing the independent world
+icon defaults. Full waypoint, native-position and minimap lifecycle fixtures
+explicitly opt into the guidance they exercise, retaining preview/Cancel,
+profile, native-read, pooling and cleanup assertions. These cases remain
+CI-only; no local tests or game execution were run.

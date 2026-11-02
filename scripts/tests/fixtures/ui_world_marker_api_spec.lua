@@ -55,7 +55,7 @@ local function Scene(performance)
             attachments = attachments,
             maxEntriesPerCall = native.pageLimit or 2,
             maxProjectionsPerCall = 1,
-            playerDistanceMetrics = true,
+            playerDistanceMetrics = native.distanceMetrics ~= false,
             worldOffsets = native.worldOffsets ~= false,
             occlusion = false,
             fallenRetentionSeconds = 60,
@@ -174,7 +174,8 @@ local function Scene(performance)
             entry.x, entry.y = source.x or 100, source.y or 200
             if requests[1].offset then entry.y = entry.y + requests[1].offset.z * (native.heightProjection or 16) end
             entry.cameraDistance, entry.cameraDepth, entry.uiUnitsPerYard = 20, 20, 16
-            entry.playerDistance = 20
+            entry.playerDistance = source.playerDistance
+            if entry.playerDistance == nil and not native.omitDistance then entry.playerDistance = 20 end
         end
         local batch = {
             apiVersion = 1,
@@ -219,7 +220,8 @@ local function Scene(performance)
         self.api.Service(true)
         native.inService = false
     end
-    function c:Frame()
+    function c:Frame(elapsed)
+        if elapsed then self.now = self.now + elapsed end
         native.frame = native.frame + 1
         native.inFrame = true
         for handler in pairs(native.handlers) do
@@ -258,6 +260,9 @@ for _, performance in ipairs({ false, true }) do
     local c = Scene(performance)
     local native, display = c.native, c.env.DFRL.display
     assert(display.Get("worldCacheIcons") and display.Get("worldPartyIcons") and not display.Get("worldBossIcons"))
+    assert(
+        not display.Get("cacheGuidance") and not display.Get("guardianGuidance") and not display.Get("partyGuidance")
+    )
     native.entries = { Record("cache", "cache"), Record("ally", "downedPartyMember"), Record("boss", "boss") }
     c:Service()
     assert(#c:Markers() == 0, "ordinary controller placed a world marker")
@@ -299,7 +304,7 @@ for _, performance in ipairs({ false, true }) do
     for _, marker in ipairs(c:Markers()) do
         local raised = marker.kind == "cache" or marker.kind == "downedPartyMember"
         local expectedY = raised and 280 or 206
-        local expectedSize = raised and 22.4 or 32
+        local expectedSize = marker.kind == "downedPartyMember" and 29.12 or (raised and 22.4 or 32)
         assert(marker.point[5] == expectedY, "marker ignored native world offset or used incorrect screen padding")
         assert(marker:GetWidth() == expectedSize and marker:GetHeight() == expectedSize, "incorrect world-icon size")
     end
@@ -378,10 +383,16 @@ for _, performance in ipairs({ false, true }) do
     c:ResetCounts()
     c:Frame()
     assert(
-        c:Markers()[1] == marker and marker:GetWidth() == 22.4 and marker:GetHeight() == 22.4 and marker.point[5] == 240,
-        "fallen ally failed to match cache size and world height"
+        c:Markers()[1] == marker
+            and marker:GetWidth() == 29.12
+            and marker:GetHeight() == 29.12
+            and marker.point[5] == 240,
+        "fallen ally lost its larger size or shared world height"
     )
-    assert(not c.writes.SetWidth and not c.writes.SetHeight, "same-size cache/ally reuse rewrote dimensions")
+    assert(c.writes.SetWidth == 1 and c.writes.SetHeight == 1, "cache/ally pool reuse did not resize exactly once")
+    c:ResetCounts()
+    c:Frame()
+    assert(not c.writes.SetWidth and not c.writes.SetHeight and not c.writes.SetPoint, "settled ally rewrote geometry")
     native.entries = { Record("pooled-boss", "boss") }
     c.env.DFRL.display.Set("worldBossIcons", true)
     c:Service(0.21)
@@ -415,6 +426,140 @@ for _, performance in ipairs({ false, true }) do
         "unadvertised offsets drew misplaced cache/ally icons or hid encounter icons"
     )
     unsupported.api.Reset()
+end
+-- Independent distance bands use hero distance, with matching range boundaries,
+-- current-camera fades, hidden painting deferral and stable native ownership.
+for _, performance in ipairs({ false, true }) do
+    local c = Scene(performance)
+    local n, display = c.native, c.env.DFRL.display
+    display.Set("worldBossIcons", true)
+    n.entries =
+        { Record("range-cache", "cache"), Record("range-boss", "boss"), Record("range-ally", "downedPartyMember") }
+    n.entries[1].playerDistance, n.entries[2].playerDistance = 40, 60
+    c:Service()
+    c:Frame()
+    c:Frame(0.13)
+    local objects, calls, capabilities, registrations = #c.objects, n.calls, n.capabilityReads, n.registers
+    display.Set("worldCacheIconMode", "near")
+    display.Set("worldBossIconMode", "far")
+    display.Set("worldBossIconDistance", 60)
+    c:Frame()
+    c:Frame(0.13)
+    local function Visible(kind)
+        for _, marker in ipairs(c:Markers()) do
+            if marker.kind == kind then return marker end
+        end
+    end
+    assert(
+        Visible("cache") and not Visible("boss") and Visible("downedPartyMember"),
+        "distance equality was inconsistent"
+    )
+    n.entries[1].playerDistance, n.entries[2].playerDistance = 40.01, 60.01
+    c:Frame()
+    c:Frame(0.13)
+    assert(
+        not Visible("cache") and Visible("boss") and Visible("downedPartyMember"),
+        "independent near/far bands failed"
+    )
+    for _, invalid in ipairs({ -1, 0 / 0, math.huge, "unknown" }) do
+        n.entries[1].playerDistance = invalid
+        c:Frame()
+        c:Frame(0.13)
+        assert(not Visible("cache"), "invalid hero distance passed a range filter")
+    end
+    n.entries[1].playerDistance = 0
+    c:Frame()
+    c:Frame(0.13)
+    assert(Visible("cache"), "zero hero distance was treated as unavailable")
+    n.entries[1].playerDistance = 40.01
+    c:Frame()
+    c:Frame(0.13)
+    n.entries[1].x = 700
+    c:ResetCounts()
+    c:Frame()
+    assert(
+        not c.writes.SetPoint and not c.writes.SetTexture and not c.writes.SetAlpha,
+        "out-of-band icon kept painting"
+    )
+    n.omitDistance = true
+    n.entries[1].playerDistance, n.entries[2].playerDistance = nil, nil
+    c:Frame()
+    c:Frame(0.13)
+    assert(
+        not Visible("cache") and not Visible("boss") and Visible("downedPartyMember"),
+        "missing hero distance was guessed"
+    )
+    display.Set("worldCacheIconMode", "always")
+    c:Frame()
+    c:Frame(0.13)
+    assert(Visible("cache") and not Visible("boss"), "Always required an optional distance metric")
+    assert(
+        n.calls == calls
+            and n.capabilityReads == capabilities
+            and n.registers == registrations
+            and #c.objects == objects,
+        "distance preview restarted discovery/ownership or rebuilt pooled icons"
+    )
+    display.Set("worldCacheAffordableOnly", true)
+    c.env.AZS_RUN, c.env.AZS_RUN_UPDATED = { gold = 0, chest = 10 }, 1
+    c:Frame()
+    assert(not Visible("cache"), "Always bypassed the affordability filter")
+    c.api.Reset()
+
+    local fade = Scene(performance)
+    fade.native.partyPresent = false
+    fade.native.entries = { Record("fade", "cache") }
+    fade:Service()
+    fade:Frame()
+    local marker = fade:Markers()[1]
+    assert(marker:GetAlpha() == (performance and 1 or 0), "wrong initial fade/static alpha")
+    fade:Frame(0.06)
+    assert(math.abs(marker:GetAlpha() - (performance and 1 or 0.5)) < 0.000001, "fade did not follow native frame time")
+    fade.env.DFRL.display.Set("worldCacheIconMode", "far")
+    fade:Frame()
+    if performance then assert(#fade:Markers() == 0, "Performance Mode retained a cosmetic fade") end
+    fade:Frame(0.06)
+    if not performance then assert(math.abs(marker:GetAlpha() - 0.25) < 0.000001, "fade reversal jumped opacity") end
+    fade.env.DFRL.display.Set("worldCacheIconMode", "always")
+    fade:Frame()
+    fade:Frame(0.13)
+    assert(marker:GetAlpha() == 1 and #fade:Markers() == 1 and fade.native.registers == 1)
+    fade:ResetCounts()
+    fade:Frame()
+    assert(not fade.writes.SetAlpha, "settled fade kept writing alpha")
+    if not performance then
+        fade.env.DFRL.display.Set("worldCacheIconMode", "far")
+        fade:Frame()
+        fade:Frame(0.06)
+        fade.env.DFRL.display.Set("performanceMode", true)
+        fade:Frame()
+        assert(#fade:Markers() == 0 and marker.fadeStarted == nil, "Performance Mode did not settle an active fade")
+        fade.env.DFRL.display.Set("worldCacheIconMode", "always")
+        fade:Frame()
+        assert(marker:GetAlpha() == 1 and #fade:Markers() == 1)
+    end
+    fade.native.entries[1].projectState = "behindCamera"
+    fade:Frame()
+    assert(#fade:Markers() == 0 and marker.fadeStarted == nil, "offscreen marker faded stale screen coordinates")
+    fade.api.Reset()
+
+    local oldDistance = Scene(performance)
+    oldDistance.native.distanceMetrics = false
+    oldDistance.native.entries = { Record("old-distance", "cache") }
+    oldDistance:Service()
+    oldDistance:Frame()
+    oldDistance.env.DFRL.display.Set("worldCacheIconMode", "near")
+    oldDistance:Frame()
+    oldDistance:Frame(0.13)
+    assert(#oldDistance:Markers() == 0, "unadvertised hero distance activated a filter")
+    oldDistance.env.DFRL.display.Set("worldCacheIconMode", "always")
+    oldDistance:Frame()
+    oldDistance:Frame(0.13)
+    assert(
+        #oldDistance:Markers() == 1 and oldDistance.native.registers == 1,
+        "Always failed on an older metric provider"
+    )
+    oldDistance.api.Reset()
 end
 -- Camera-frame affordability changes gate caches without discovery or rebinding.
 for _, performance in ipairs({ false, true }) do

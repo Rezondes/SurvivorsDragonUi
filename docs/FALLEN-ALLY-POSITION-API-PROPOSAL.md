@@ -427,8 +427,9 @@ batches hide all icons atomically and retire the presentation for retry.
 Encounters use the native unit `overhead` point with six screen units above it.
 Caches and fallen allies use `position` with the same shared `{ z = 5 }`
 offset, placing their centers five world yards above the cache or revive spot
-without extra screen padding. Their sides share one 22.4-unit value, 70% of the
-former 32. Every request slot explicitly sets or clears its offset, so this
+without extra screen padding. Cache sides are 22.4 units; fallen-ally sides
+are 29.12 units, 30% larger than their former 22.4. Every request slot explicitly
+sets or clears its offset, so this
 height never leaks to an encounter kind. Pooled frames update dimensions only when the required size
 changes. Occlusion is unsupported, so markers can show through walls.
 
@@ -437,7 +438,9 @@ hide without inventing a point. `expired` and `unknownAnchor` handles retire
 from the accepted list and recycle their views, so later frames stop projecting
 them. A `worldChanged` result clears the whole catalog. Frames are children of
 WorldFrame and reuse the existing artwork, static bindings and changed-only
-placement/visibility in both Performance Mode states.
+placement/visibility. Cache and encounter icons use a 120 ms appearance/range
+fade in normal mode and instant visibility in Performance Mode; invalid or
+offscreen points and explicit retirement hide immediately.
 
 ### Demand, caching and cleanup
 
@@ -479,3 +482,16 @@ added by the sizing controls.
 The request-count, pooling, paging, failure and stream/terminal-handle cases
 are CI-only mocks. They do not prove native scheduling, delivery, rendering
 cost, instance revive locations, appearance or live FPS.
+
+### Cache and encounter distance preferences
+
+Their independent Always/Nearby only/Distant only selectors use the released
+`playerDistance` field and advertised `playerDistanceMetrics`, with a 40-yard
+default cutoff adjustable from 5 to 200. Near includes the cutoff; Far starts
+beyond it. Missing metrics hide a filtered kind rather than guessing from the
+camera. Always keeps working without that optional metric. These settings add
+no native lookup; cached settings and existing native projections decide
+visibility, with the same bounded pool/callback/discovery ownership. Affordability
+still gates caches independently, and fallen-ally icons retain their existing
+instant visibility. See [performance notes](PERFORMANCE.md#world-icon-distance-visibility-and-quick-fades)
+for fade and settings-region costs and [CI scope](PR-CHECKS.md).
