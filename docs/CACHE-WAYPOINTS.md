@@ -20,23 +20,80 @@ Cancel/world/logout/reload discard, profiles and both full resets. Turning this
 guide off clears its live roster and skips party reads; enabling waits for a
 fresh native sample. No member positions or death state are saved.
 
-The existing ten-Hz/deferred controller reads current `party1` through `party4`
-using `UnitExists`, `UnitIsConnected`, `UnitIsDead`, `UnitIsGhost`, `UnitName` and
-`GetPlayerMapPosition(unit)`. Boolean true and numeric one mean eligible; zero
-does not. Membership/name and death are checked again after the position read.
-Revival, disconnect, missing/failed coordinates, inactive phase and world cleanup
-remove guidance at the next existing refresh. No last-alive or historical
-location is substituted. Ghosts are excluded because their current unit position
-cannot establish their body's location.
+The existing ten-Hz/deferred controller prefers the proposed
+`AZS_GetDownedPartyMembers()` when that function exists. It copies at most four
+members by opaque native ID and validates the complete snapshot before accepting
+positions. World X/Y/Z can be zero; map, run and coordinate-space identity must
+match the current validated `AZS_GetPlayerPosition()` reading. Matching absent
+run IDs are accepted where the player-position contract permits them. This path
+needs no map UVs and can guide inside instances and to a released hero's
+native revive location. It never uses a moving ghost's position.
 
-Remote party UVs are accepted only on the confirmed current-zone map sheet with
-a readable player position. Another open map, `(0, 0)` or an unsupported instance
-map hides this guide. Distance and bearing require the same native map-scale
-calibration as existing map guidance; without scale the caption is **On map** and
-the arrow/pins hide. Received cache/lair world guidance retains its existing
-instance fallback. No remote world coordinates or 3D body projection API are
-available, so this is HUD/minimap guidance and does not draw above the body in
-the world.
+An empty native snapshot removes guidance. A failed/unavailable snapshot or an
+unavailable location hides it; neither falls back to old map coordinates while
+the new getter is present. The current read replaces the last position. Revival,
+disconnect, map/run changes and world cleanup retire the guide. Native API
+availability and actual instance behavior remain unverified.
+
+When the getter is absent, the original `party1`–`party4` map path remains:
+connected, dead, non-ghost units with a rechecked native name and readable UVs on
+the confirmed current-zone sheet. Unsupported instance maps, `(0, 0)` map UVs
+and missing calibration still hide the map arrow/pins or show **On map**. No
+last-alive or historical location is substituted.
+
+### World icons (native API)
+
+**Waypoints** also has three independent world-icon switches. **Icons above
+caches** and **Icons above fallen allies** default on; **Icons above guardians
+and bosses** defaults off and includes final bosses. These switches retain live
+preview, Confirm/Cancel, profiles and both resets. They are independent of the
+HUD/minimap guidance switches.
+
+**Only show affordable caches** defaults off. Enable it to show a world cache
+icon only when the latest received native gold covers the next cache cost.
+Equality and a free cache count as affordable. Missing or invalid gold/cost data
+hides cache icons while this filter is on. The option dims when **Icons above
+caches** is off and retains its choice. It shares preview, Confirm/Cancel,
+profiles and both resets; HUD/minimap guidance and other world icons keep their
+existing behavior.
+
+Icons require the five documented general world-anchor endpoints and version-one
+capabilities in [the released API](AzerothSurvivors-Addon-API.md#world-anchors-version-1).
+Discovery uses opaque handles; guardians/bosses follow the actual living entity,
+not the fixed lair. Encounters use the native `overhead` point with six UI units
+of screen padding. Cache and fallen-ally icons use `position` with the same
+documented world offset `{ z = 5 }`: their centers sit five yards above the
+cache or revive spot, without extra screen padding. Both have 22.4-unit sides,
+30% smaller than their former 32-unit icons. These two kinds require advertised
+world-offset support; encounter icons remain usable without it.
+Only kinds with their required advertised attachment are requested. No
+nameplate matching or old screen point is substituted.
+
+Discovery finishes every page in one bounded controller pass; cursors never
+cross frames. Complete catalogs replace the queried kinds atomically. Valid
+handles continue projecting each native post-camera frame while periodic
+discovery checks for new entities and delayed guardian classifications. A
+`CATALOG_CHANGED`, first-read `NOT_READY` or malformed refresh keeps the last
+valid handles; their native projection still decides whether they can be drawn.
+These failures do not release the callback or publish a partial list. Explicit
+world/context/stream changes retire the old handles. `STREAM_CHANGED` clears
+old icons immediately; expired and unknown handles stop receiving projections.
+
+Only marker kinds that can currently be shown are requested. The affordability
+filter skips cache discovery and projection while gold is insufficient or
+unknown; disabled encounter kinds do not start the native enemy scan. Known
+empty parties skip ally requests. Hidden UI and disabled features do no marker
+API reads. Existing handles, artwork bindings and pooled frames are reused.
+Options update through the existing settings listener, and repeated failures
+back off instead of flooding the provider. Visible recovery reads fresh data.
+
+Only current post-camera projections place icons. Offscreen/behind-camera,
+expired and unavailable anchors hide. Native world projection makes cache and ally
+height follow distance and camera perspective. Occlusion is unsupported, so markers
+can show through walls. Collected caches and revived/departed allies are removed
+by the next complete native catalog or native handle retirement. The released
+reference defines the accepted schema; installed-game delivery and appearance
+remain unverified.
 
 The native party-position contract is documented by
 [benilla worldmap.rs at 0259668](https://github.com/samwhosung/benilla/blob/0259668162cd2674730e078f5bf3def4cf4dfb35/crates/benilla-ui/src/script/worldmap.rs#L953)
@@ -50,7 +107,7 @@ map support and rendering have not been verified through execution.
 - Cache and guardian guides reconsider the nearest available destination every five seconds. A new nearer spawn or player movement can change the selected destination at the next check; an exactly equal distance keeps the current choice. Initial selection, removal of the current destination and showing a hidden guide can choose immediately. Direction, distance and minimap updates keep their existing responsive cadence. While position data is unavailable, the current valid destination or first available entry keeps the overlay visible with "On map", and nearest selection retries on the same five-second schedule. Disabled or Layout-hidden HUDs defer this selection work until shown. The two selections remain independent; there is no full world-map overlay or click-to-track control.
 - Each waypoint has its own horizontal floating-label guide, 190 by 46 at its default size. An upright 32-by-32 icon sits beside two left-aligned text lines: the full Cache or Guardian title in DEFAULT 13 above distance in DEFAULT 15. The guardian HUD uses the gold-dragon/skull medallion `GuardianFloating.tga`, and the cache HUD uses the supplied `Chest.blp`. The icon and text have transparent backgrounds, with no bottom stripe, rectangular fill or enclosing border.
 - Cache defaults to the left of that action-bar/XP stack and **Guardian** to the right, vertically centered on its combined artwork span with an eight-unit horizontal gap beyond the artwork edges. Registration waits for the bar/XP appearance metadata, after which shared layout handling converts these defaults to independent UIParent positions. Confirmed custom positions remain in use, and unrelated layout stays untouched.
-- The full native navigation arrow from `HudArrow.tga` rotates in place to the right of the text by default. Its visible width is `19 * 1.2 = 22.8`, 20% larger than the selected floating-label preview. The original texture has a 24-pixel-wide glyph on a 32-pixel canvas, so the full canvas draws at `19 * 1.2 * 32 / 24 = 30.4` square; the icon and text stay upright. Both guides show straight-line horizontal distance in yards from native world coordinates when available, otherwise when native map geometry establishes the scale.
+- The selected **05 Quest spear** direction arrow rotates in place to the right of the text by default. `HudArrow.tga` retains Blizzard's original 32-by-32 quest-arrow canvas, whose visible glyph is 21 by 23 pixels. The full canvas draws at `24 * 32 / 23` square (about 33.39 units), matching the selected preview's 24-unit glyph height and about 21.91-unit width. Cache, Guardian and fallen-ally guidance share only this replacement arrow; their existing icons, labels, positions, mirroring, native directions and both Performance Mode lifecycles stay unchanged. Both cache and guardian guides show straight-line horizontal distance in yards from native world coordinates when available, otherwise when native map geometry establishes the scale.
 - **Mirror cache waypoint** and **Mirror guardian waypoint** in `/sdui` → **HUD** independently move each arrow to the left and its icon to the right, with right-aligned text between them. Leave a mirror option off for an arrow on the right. Both default off and preview immediately, including while guidance is hidden. Confirm saves the choice; Cancel, world leave/logout/reload discard drafts, and both full resets turn mirroring off. Either combination is supported, including both arrows on the same side. Mirroring preserves the guide's position, scale, shape, distance and direction.
 - Guardian coordinates describe the fixed lair, not the guardian's moving combat position. The visible label is **Guardian**; its distance and direction still refer to the lair, including while its guardian is fighting elsewhere.
 - **Guide to next respawn** under `/sdui` → **Map & navigation** defaults off. When enabled and every guardian is defeated, Guardian guidance points to the lair with the shortest known native respawn timer. A timer of zero takes priority; equal timers keep the current lair. Unknown timers or missing coordinates cannot supply a destination. Any received living guardian takes priority again. This works with defeated minimap icons and minimap timers turned off. The option retains its value but dims and disables while Guardian guidance is off.

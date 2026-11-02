@@ -1096,3 +1096,97 @@ retain CI-only coverage.
 The existing required job runs the fixture; it is not shipped or run locally.
 This isolates the view boundary, rather than executing the full timer/game or
 proving native packet delivery and appearance.
+
+## Released world guidance and adjustable SCT distance
+
+CI-only native-boundary fixtures cover authoritative downed-party positions in
+instances without map UVs, valid zero coordinates, exact map/run/space matching,
+optional absent run IDs, detached copies, unavailable/empty snapshots, malformed
+and duplicate/sparse members, observer movement and removal. Full waypoint
+controller cases retain native-feed preference and legacy fallback only when the
+new getter is absent.
+
+General world-marker fixtures load the production adapter with explicit fake
+capability/discovery/projection/registration endpoints. They separate ordinary
+service and post-camera phases and cover defaults, complete pagination, bounded
+batches, no early placement, frameCurrent, camera movement, offscreen/unavailable
+hiding, atomic malformed-batch rejection, collection/revival, pooling,
+changed-only writes, partial registration, failed release, retired/foreign
+callbacks, disabled work and old providers in both Performance Mode states.
+
+SCT cases cover player-distance sizing with adjustable reference/floor, zero,
+missing/negative/nonfinite metrics, missing capability, camera-only changes and
+existing normal/Performance Mode lifetimes. Settings cases cover search,
+dependencies, normalized bounds, preview/Confirm/Cancel, profiles and reset.
+These fixtures are authored for CI and were not run locally. They cannot prove
+the actual provider's delivery, native timing,
+instance locations, overhead placement, wall visibility, appearance or FPS.
+
+Affordable-only world-cache cases cover default-off and explicit saved choices,
+preview/Confirm/Cancel, older/named profiles, invalid values and reset. Editor
+cases cover the searchable checkbox and its retained/disabled state while cache
+icons are off. Production marker fixtures compare native gold and next-cache
+cost without rounding: below/equal/above threshold, earning/spending, price
+changes, free caches, fractional amounts, missing receipts and malformed or
+nonfinite values. Hidden caches request no projection and unchanged affordable
+icons skip painting; ally icons, pools and callback/catalog ownership remain
+unchanged in both Performance Mode states. These cases are authored for CI only
+and were not run locally; actual native gold publication and rendering remain
+unverified.
+
+Released-contract compatibility cases model position-only caches/downed allies and
+unit-only overhead, including capability combinations without global overhead,
+correct screen spacing and explicit unsupported-attachment recovery. Fake
+catalog cursors expire when the fixture frame changes, so multi-page acceptance
+requires one synchronous service pass. Cases preserve known handles and the
+same callback after first-read `NOT_READY`, `CATALOG_CHANGED`, malformed/cyclic
+or oversized refreshes; reject partial additions; bound pages/records; reuse
+handles across many camera frames without discovery reads; and retire a
+complete empty catalog. Delayed native enemy-to-guardian classification keeps
+its opaque handle and never uses name-based inference. Both Performance Mode
+states retain affordability/pooling/cleanup coverage. These cases use the
+released 2026-11-02 API schema and are authored for CI only; they do not prove
+engine delivery, scheduling or appearance.
+
+World-marker performance cases count capability, discovery, phase, player-position,
+option and projection calls. Disabled, UIParent-hidden (including an independently
+visible WorldFrame), unaffordable solo and no-party consumers remain quiet. Only
+eligible kinds enter each query; temporarily omitted cache handles and static
+bindings survive other-kind refreshes. Repeated camera frames do no metadata or
+option reads; gated discovery does no player-position read; empty lists do no
+frame API work. Cases cover copied capability-table mutation safety, reuse and
+later activation expiry, progressive failure backoff/recovery, throttled failed
+release, and stable foreign callbacks/pools in both Performance Mode states.
+
+Native downed-position cases count coarse roster reads once per shared pass,
+zero API/player-position calls for known solo state, same-pass empty downed-feed
+suppression of duplicate world discovery, no player-position reads for
+empty/unavailable downed lists, conservative unknown-roster recovery, bounded
+failure retries without stale/fallback positions, successful retry recovery and
+world-reset delay cleanup. Full
+waypoint cases exercise hidden UIParent, hidden HUD plus minimap, visible-minimap
+recovery and disabled/no-party getter suppression. They are authored for CI only;
+no local tests, validation or addon/game execution were run. Counts do not prove
+native call cost, rendering cost, appearance or live FPS gains.
+
+Released world-anchor cases use string-list capabilities and attachments,
+`maxEntriesPerCall` / `maxProjectionsPerCall`, cache state `present`, and catalog
+records without a draft `anchorStatus`. The fake query validates states as well
+as kinds, preventing ignored query fields from hiding contract mismatches.
+Pages/projections carry native stream identities. Cases cover discovery and
+projection `STREAM_CHANGED`, projection stream replacement, mixed-stream pages,
+overflowed catalogs, missing clock metadata, incomplete capabilities, and
+terminal `expired` / `unknownAnchor` retirement. They retain pools and the exact
+callback across stream recovery and count zero later projections for retired
+handles in both Performance Mode states. No runtime test hook is shipped and
+no local tests, validation or addon/game execution were run.
+
+Cache/ally styling cases in both Performance Mode states require the reused
+native request to carry the same `offset = { z = 5 }` table for caches and
+fallen allies, with no offset for encounters. A changed fake camera projection alters the five-yard point without
+an added screen gap or metadata query. Pooled cache → ally → boss → cache views
+retain one frame while restoring 22.4/32-unit sizes and existing encounter
+spacing. Cache → ally reuse issues no redundant size writes. Settled frames
+issue no size/placement writes. Missing world-offset support omits cache and
+ally icons while leaving encounter markers usable. These cases
+are CI-only; no local tests, validation or game execution were run.

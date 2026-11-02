@@ -1,11 +1,11 @@
--- Official cache/lair snapshots and live native dead-party map positions.
+-- Official cache/lair snapshots and authoritative downed-party positions.
 --[[
 The navigation and guardian artwork is owned by Blizzard Entertainment. The Gethe archive is a public extraction of World of Warcraft client UI assets; it does not grant a new license to Blizzard artwork.
 
 Navigation artwork: retail 9.2.7 (45114), Gethe mirror commit
-d23deaf8f44a7d280dc974a5c9d5321c013db59b. The navigation atlas was cropped
-to TGA, preserving original colors and alpha:
-https://raw.githubusercontent.com/Gethe/wow-ui-textures/d23deaf8f44a7d280dc974a5c9d5321c013db59b/Navigation/IngameNavigationUI.PNG
+d23deaf8f44a7d280dc974a5c9d5321c013db59b. The selected Quest spear retains
+the complete original 32-by-32 canvas, colors and alpha in TGA/BLP:
+https://raw.githubusercontent.com/Gethe/wow-ui-textures/d23deaf8f44a7d280dc974a5c9d5321c013db59b/MINIMAP/MiniMap-QuestArrow.PNG
 
 Guardian medallion artwork is Blizzard game artwork from source commit
 00197f223180323ea7297c0157edbd1a43d2f99f:
@@ -28,6 +28,7 @@ it does not assert that a resurrection is in progress. Copyright Blizzard.
 DFRL:NewMod("Waypoints", 3, function()
     local navigation = DFRL.navigation
     if not navigation then return end
+    local worldMarkers = T.NewWorldMarkerApi and T.NewWorldMarkerApi(navigation)
     local texturePath = DFRL:GetInfoOrCons("tex") .. "waypoint\\"
     local actionDefaults, xpDefaults = DFRL.actionBarDefaults, DFRL.xpBarDefaults
     if not actionDefaults or not xpDefaults then return end
@@ -42,8 +43,8 @@ DFRL:NewMod("Waypoints", 3, function()
         + 8
         + HUD_HEIGHT / 2
     local sideOffset = actionDefaults.width / 2 + actionDefaults.sideInset + 8 + HUD_WIDTH / 2
-    -- The selected preview shows 19 visible pixels; the source glyph spans 24/32.
-    local POINTER_SIZE = 19 * 1.2 * 32 / 24
+    -- Quest spear: keep the selected preview's 24-unit height for its 23/32 glyph.
+    local POINTER_SIZE = 24 * 32 / 23
     local trackers = {
         {
             kind = "cache",
@@ -652,6 +653,7 @@ DFRL:NewMod("Waypoints", 3, function()
         T.SetTextIfChanged(tracker.distanceText, "")
     end
     local function ClearAll()
+        if worldMarkers then worldMarkers.Reset() end
         for _, tracker in ipairs(trackers) do
             Clear(tracker)
         end
@@ -695,7 +697,13 @@ DFRL:NewMod("Waypoints", 3, function()
     end
 
     local function PartySnapshot(tracker)
-        if not DFRL.display.Get(tracker.displayKey) then return end
+        if not DFRL.display.Get(tracker.displayKey) or not FrameVisible(UIParent) then return end
+        if DFRL.layout.IsHidden(tracker.layoutKey) and (not Minimap or not FrameVisible(Minimap)) then return end
+        if navigation.HasParty and not navigation.HasParty() then return end
+        if navigation.DownedPartySnapshot then
+            local native, supported = navigation.DownedPartySnapshot()
+            if supported then return native end
+        end
         local result = tracker.partyEntries or {}
         tracker.partyEntries = result
         local count = 0
@@ -1192,6 +1200,7 @@ DFRL:NewMod("Waypoints", 3, function()
         if dirty or age >= 0.1 then
             dirty, age = false, 0
             Refresh()
+            if worldMarkers then worldMarkers.Service(inWorld) end
             refreshed = true
         end
         if inWorld then
@@ -1203,6 +1212,11 @@ DFRL:NewMod("Waypoints", 3, function()
     end
     controller:SetScript("OnUpdate", function() navigation.WithSample(UpdateWaypoints) end)
     local function UpdateDisplay()
+        if worldMarkers then
+            worldMarkers.UpdateOptions()
+            worldMarkers.Service(inWorld)
+        end
+        dirty = true
         -- Visibility drafts do not retire snapshots, selections or calibration.
         showGuardianTimers = DFRL.display.Get("guardianMinimapTimers")
         local nextGuideRespawns = DFRL.display.Get("guardianRespawnGuidance")
@@ -1230,6 +1244,7 @@ DFRL:NewMod("Waypoints", 3, function()
         local reloadUI = _G.ReloadUI
         _G.ReloadUI = function()
             StopMinimapPins()
+            if worldMarkers then worldMarkers.Reset() end
             return reloadUI()
         end
     end

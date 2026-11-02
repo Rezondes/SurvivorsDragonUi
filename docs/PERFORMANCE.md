@@ -602,7 +602,7 @@ categories, without proposed-only `basicAttack` or `abilityKey` dependencies.
 Missing native miss wording skips that event's presentation before queue work;
 it does not discard valid damage, re-prime the stream or invent a caption.
 
-Current-camera world projection, offscreen hiding and bounded depth scaling are
+Current-camera world projection, offscreen hiding and bounded player-distance scaling are
 identical in both Performance Mode states. Distance multiplies the existing
 animation scale, with no extra effect loop or unchanged scale writes. Hidden
 labels keep expiring while skipping font/geometry/animation writes; they do not
@@ -617,6 +617,19 @@ lifecycle are retained. The existing listener caches the choice; the next owned
 post-camera pass applies it without resetting hits, lifetimes or handler ownership.
 Off skips the factor calculation. Hidden/off consumers retain their deferred
 work rules, and both Performance Mode states share the same choice.
+
+The two numeric distance choices use normalized `sctDistanceReference` (1–100
+yards, default 20) and `sctDistanceMinimum` (25–100%, default 55). Scaling consumes
+only optional `playerDistanceMetrics`/`playerDistance` on existing combat-text
+projection batches, without extra lookup/discovery/member passes. Missing,
+negative or nonfinite distance retains full chosen size; zero is full size.
+Camera metrics do not substitute. The existing settings listener updates one
+small sizing record, without adding closure captures to the frame handler.
+
+The lazy numeric settings add one container, two row frames, four existing
+editor buttons (16 texture regions/four labels), and six row FontStrings. The
+scroll page grows by 96 units; search reuses its two caption records. Disabled
+sizing controls retain their chosen values and do no gameplay work.
 
 The lazy Combat text page adds one standard button, four texture regions and
 two FontStrings for the caption/hint, using existing checkbox artwork. Its row
@@ -3683,3 +3696,152 @@ timer's event integration was source-reviewed; these mocks do not establish
 live delivery or the packaged Lua VM. Local work was source/diff inspection,
 image-data preparation and pinned formatting, without local tests, standalone
 validation or addon/game execution.
+
+### Released general world markers and downed positions
+
+`core/world_marker_api.lua` shares the waypoint controller's ten-Hz/deferred
+service pass; it adds no event or ordinary updater. One native post-camera
+callback owns screen projection. Each discovery refresh reads all advertised
+pages synchronously within one frame, bounded to 256 pages and 256 total
+catalog entries. Cursors stay local to that call. Cyclic cursors, changed
+catalog identity during pagination and malformed pages reject the attempted
+replacement; only a complete list commits atomically. Accepted discovery
+refreshes run no more often than every 0.2 UI seconds, without a catalog read
+on each projection frame.
+
+Temporary discovery failures preserve the last accepted handles and the exact
+callback. `STREAM_CHANGED` clears old handles immediately and schedules a
+fresh scan through that same owner. Page/projection stream identities join the
+world/context/clock fences. Overflowed catalogs never commit partial removal
+evidence. Terminal `expired` / `unknownAnchor` handles leave the accepted list
+and recycle their views, so future camera frames stop projecting them.
+The first `NOT_READY`/`CATALOG_CHANGED` retry waits at least 0.1 seconds;
+other first failures wait 0.5 seconds. Consecutive failures double that delay up
+to eight seconds, and a complete accepted snapshot restores the normal cadence. Existing markers keep
+using fresh native projections while the refresh is pending. A complete empty
+catalog removes queried-kind records; confirmed world/context changes retire all rather
+than borrowing another world's identities. Reused staging/seen/cursor buffers
+retain explicit Lua 5.0 lengths even after a rejected partial scan so Reset
+clears all retired scalar IDs. Both Performance Mode states use the same
+instant, static lifecycle.
+
+The authoritative source is the released 2026-11-02 API reference. Capabilities
+and attachments are validated string lists; only supported-kind flags and
+`maxEntriesPerCall` / `maxProjectionsPerCall` are copied. Caches use `present`;
+no draft catalog readiness field or alternate field name is required. These
+metadata validations add no getter, scan, updater, frame or region.
+
+Only enabled cache/guardian/boss/fallen-ally kinds are requested. General enemy
+and lair markers are not requested. Up to 256 lazy frame/texture pairs reuse a
+single pool and existing waypoint artwork. Removed handles recycle before new
+frames are acquired. Successful texture bindings, placement and visibility are
+changed-only; failed bindings retry on a later visible frame. The current
+player context is validated during eligible discovery. Every projection batch
+must match that accepted world epoch and stream and all chunks share one current camera
+sample and clock before painting. The camera callback does not repeat native
+phase/player-position/capability reads. Hidden world/off/retired
+consumers do no discovery or projection. Unsupported/erroring provider selection
+starts at a half-second retry and backs off to eight seconds. Valid capability
+metadata is copied into a small cache, reused during later activation for up to
+30 seconds, and invalidated by a changed getter or clock regression. No native
+capability snapshot table is retained. Failed callback release retries at most
+twice per second and retains only the exact
+callback needed for retry; retired callbacks stay inert and foreign handlers
+remain untouched. The released API has no occlusion support, so markers can
+show through walls; no occlusion query or undocumented result field is used.
+
+Attachment selection is per kind and advertised capability. Cache and
+fallen-ally icons share one 22.4-unit size (30% smaller) and one `{ z = 5 }`
+world-offset table, using `position` with zero screen padding. The existing
+batched projection places them five yards above the cache or revive spot
+without another query or per-frame offset-table allocation. Both kinds require
+advertised `worldOffsets`; encounter kinds stay usable without it. Every reused
+request slot sets or clears its offset. Encounters retain 32-unit icons at
+`overhead` plus six screen units. Pooled views cache their size and only write width/height on actual size
+changes, including reuse across kinds. No frame, region, asset or updater is
+added. Unsupported attachment kinds skip discovery; per-entry unavailable or
+unsupported attachments hide without invented coordinates. No occlusion query
+is requested. Periodic native
+classification refresh can reveal a guardian after its reported initial enemy
+classification, keeping the opaque handle unchanged. Lazy enemy scan warmup
+retries without unregistering the existing marker callback. General enemies,
+fallen-enemy corpses and lairs remain outside the requested marker kinds.
+The released provider keeps observed fallen enemies for 60 seconds; SDUI does
+not request that catalog or retain enemy-death marker history.
+
+Native downed-party reads reuse one array and at most four point records. The
+whole dense native list is validated before copying; only current matching
+map/run/space coordinates participate. It shares the existing same-pass player
+sample, adds no native unit scans and retains no native snapshot tables. Missing
+getter uses the old party-map path; present but unavailable native data never
+borrows stale map/ghost positions. No world position is saved. The three world
+switches and the affordable-only cache filter add four ordinary lazy settings
+toggles (four button frames, sixteen texture regions and eight FontStrings) to
+the existing page.
+
+The default-off `worldCacheAffordableOnly` filter checks published native
+`AZS_RUN.gold >= AZS_RUN.chest` once per existing post-camera pass when selected.
+Both amounts must be finite/nonnegative and the run receipt must be valid;
+equality, fractional amounts and free caches retain their exact native meaning.
+No affordability history, getter, event or updater is added. The existing request
+preparation walk skips unaffordable caches with one reused bounded request-index
+array; it adds no record scan. Skipped caches do no projection, texture binding,
+allocation or placement. Existing handles/pools remain available for immediate
+recovery after earning gold or a cost change. Other entity kinds retain their
+projection and visibility. Changes to the eligible kind mask request a fresh
+complete catalog without resetting native handler ownership or valid handles. The checkbox uses the existing dependency helper
+and keeps its choice while cache icons are off.
+
+World-marker options are copied only at construction and through the existing
+display listener. The controller and marker frames do no saved-option reads.
+Requests contain only enabled kinds that can currently be displayed: affordable
+cache icons when the filter is on, encounter icons when enabled, and ally icons
+when a known native party is present. A valid zero `GetNumPartyMembers()` result
+suppresses party work; absent, throwing or invalid roster metadata remains
+conservative and does not suppress the authoritative feed. That cheap roster
+sample is shared only within the existing controller pass, without another event
+or updater.
+
+Filtered cache kinds are omitted from discovery as well as projection. A refresh
+of other kinds retains bounded scalar handles for temporarily unqueried but
+still-enabled kinds, with a maximum of 256 records across active and dormant
+rows. Disabled kinds and world/run retirement clear their gameplay records.
+Temporarily unaffordable handles and prepared marker bindings can resume without
+reallocating a view or rebinding the callback. If all kinds lack demand, the
+already-owned callback stays inert and sends no native reads/projections; it has
+only its constant callback dispatch cost. The shared service releases fully
+disabled/hidden/world-retired owners. Both WorldFrame and UIParent visibility are
+checked, including clients whose WorldFrame does not inherit UIParent hiding.
+
+The discovery cadence gate runs before native player-position reads. Empty
+catalogs and suspended kinds do no frame API work, texture preparation, row
+placement or per-frame option/phase reads. Fresh current-camera projections are
+not cached across frames for visible eligible handles; this prevents stale
+screen locations while moving the camera. Required native movement/context
+reads for existing HUD/minimap guides keep their shared original sampling.
+
+An already validated empty downed-party feed suppresses general ally discovery
+within that same shared reader pass. Its presence flag is not cached across
+passes: unavailable feeds remain unknown, and marker-only consumers still use
+their bounded discovery path when guidance did not read positions. No second
+getter or member scan is added to decide this demand.
+
+The downed-party getter is skipped when its HUD and minimap are both hidden,
+when UIParent is hidden, when guidance is off, or when the native roster is
+known empty. Empty/position-unavailable downed snapshots do not request player
+position at all. Its small identity-validation map is reused rather than
+allocated on each read. Failed or malformed downed reads hide retired positions
+and back off from half a second to eight seconds. Valid reads restore normal
+response time; a changed getter, known solo state or world reset releases that
+delay. Visible recovery reads current native data; unknown roster metadata
+preserves the old conservative behavior.
+
+SCT distance sizing uses the scalar already returned by its existing batched
+combat-text projection. These controls add no event/history/position/capability
+query of their own. They retain existing pooling and current-frame projection,
+with no cached stale hit locations or locally invented distances.
+
+Coverage is authored for CI only. No local tests, syntax/validation checks or
+addon/game execution were performed. Operation bounds and mocks do not prove
+native API delivery, instance revive locations,
+attachment correctness, wall visibility, camera timing, appearance or FPS.
