@@ -556,7 +556,7 @@ local function Number(parent)
     control.label:SetWidth(322)
     control.label:SetHeight(28)
     control.description = control:CreateFontString(nil, "OVERLAY")
-    control.description:SetWidth(166)
+    control.description:SetWidth(178)
     control.description:SetHeight(40)
     return control
 end
@@ -568,7 +568,7 @@ env.T.CompactEditorNumber(number)
 context:NoPresentationWrites()
 number.label.naturalWidth = 500
 assert(env.T.CompactEditorNumber(number) == 84, "wrapped numeric title lost its second line")
-assert(number.description.point[5] == -38 and number.description:GetWidth() == 166, "number help overlaps steps")
+assert(number.description.point[5] == -38 and number.description:GetWidth() == 178, "number help overlaps steps")
 number.label.naturalWidth = 0
 env.T.CompactEditorNumber(number)
 assert(not number.editorNumberHeight, "missing numeric glyph metrics were cached")
@@ -755,18 +755,22 @@ env.DFRL.runFont = {
     Load = function(value) context.profileRunFont = value end,
 }
 context:Load("core/profiles.lua", "Profiles")
+local outgoingMode = "on"
 env.DFRL.sct = {
-    GetMode = function() return "on" end,
+    GetMode = function() return outgoingMode end,
     GetIncoming = function() return true end,
     Listen = function(callback) context.sctListener = callback end,
-    SetMode = function() end,
+    SetMode = function(value)
+        outgoingMode = value
+        if context.sctListener then context.sctListener() end
+    end,
     SetIncoming = function() end,
     NormalizeMode = function(value) return value end,
 }
 env.fontEditor, env.fontMenu, env.fontSample, env.fontSampleClock = nil, nil, nil, nil
 env.incomingControl, env.sctDescription, env.sctSizeLabel = nil, nil, nil
 env.displayControls, env.displayNumbers, env.dependentSettings = {}, {}, {}
-env.outlineButtons, env.faceButtons, env.sctButtons = {}, {}, {}
+env.faceButtons = {}
 env.currentFont = { face = "DEFAULT", size = 12, outline = "", shadow = true }
 env.fontDraft = { face = "DEFAULT", size = 12, outline = "", shadow = true }
 env.NewClockLabel = function(source)
@@ -797,6 +801,23 @@ local openingGlyphs = context.reads.glyphs or 0
 editor.Create("layout")
 local dialog = env.fontEditor
 local pages = dialog.navigation.pages
+local function SelectChoice(control, value)
+    context:Call(control, "OnClick")
+    local menu = dialog.editorDropdownMenu
+    if control.dropdownEnabled == false then
+        assert(not menu or not menu:IsShown(), "disabled dropdown opened")
+        return
+    end
+    assert(menu and menu:IsShown() and menu.owner == control, "dropdown lost its owner")
+    for _, item in ipairs(menu.buttons) do
+        if item.choice == value then
+            context:Call(item, "OnClick")
+            assert(not menu:IsShown() and not menu.owner, "selection retained dropdown ownership")
+            return
+        end
+    end
+    error("missing dropdown choice: " .. tostring(value))
+end
 assert(
     context.escapeWindow == dialog and dialog:GetName() == "SurvivorsDragonUiSettings",
     "settings window was not handed to the shared Escape-close owner"
@@ -832,20 +853,21 @@ assert(
     -dialogSearchHeader.point[5] + dialogSearchHeader:GetHeight() <= -performanceControl.point[5],
     "search header overlaps Performance Mode"
 )
-local categoryKeys = { "layout", "units", "combat", "meter", "action", "encounters", "map", "interface", "profiles" }
+local categoryKeys =
+    { "layout", "units", "combat", "meter", "action", "jewelry", "encounters", "map", "interface", "profiles" }
 local previousBottom = -performanceControl.point[5] + performanceControl:GetHeight()
 for index, key in ipairs(categoryKeys) do
     local button = dialog.navigation.buttons[key]
     local top = -button.point[5]
     assert(
-        button:GetParent() == dialogSidebar and top == 112 + (index - 1) * 48 and top >= previousBottom,
+        button:GetParent() == dialogSidebar and top == 112 + (index - 1) * 46 and top >= previousBottom,
         "category rows overlap search, Performance Mode or another category"
     )
     previousBottom = top + button:GetHeight()
 end
 assert(
-    previousBottom == 538 and previousBottom <= dialogSidebar:GetHeight(),
-    "the ninth sidebar category extends into the footer"
+    previousBottom == 566 and previousBottom <= dialogSidebar:GetHeight(),
+    "the tenth sidebar category extends into the footer"
 )
 local dialogScroll = env.SurvivorsDragonUiSettingsScroll
 assert(
@@ -871,38 +893,32 @@ dialog.navigation.Search("marks rewards")
 assert(#dialog.navigation.results == 1 and not pages.loot, "generic hidden settings were not searchable")
 dialog.navigation.ClearSearch()
 local layoutPage = pages.layout
-assert(dialog.uiFontButtons.default.editorSelected, "Layout did not select the default font")
-assert(not dialog.uiFontButtons.friz, "Layout still offers the removed Friz Quadrata choice")
-context:Call(dialog.uiFontButtons.arial, "OnClick")
+assert(dialog.uiFontDropdown.dropdownValue == "default", "Layout did not select the default font")
+for _, entry in ipairs(dialog.uiFontDropdown.dropdownChoices) do
+    assert(entry.value ~= "friz")
+end
+SelectChoice(dialog.uiFontDropdown, "arial")
 editor.Display()
 assert(display.Get("uiFont") == "arial" and not env.SurvivorsDragonUiDisplay, "Layout font saved before Confirm")
-assert(dialog.uiFontButtons.arial.editorSelected, "Layout font selection did not refresh")
+assert(dialog.uiFontDropdown.dropdownValue == "arial", "Layout font selection did not refresh")
 assert(display.Get("sctFont") == "default", "Layout font changed the independent SCT choice")
 local globalShadow = assert(env.displayControls.uiFontShadow, "Layout did not prepare Black shadow")
 assert(
-    globalShadow.editorChecked and dialog.uiFontOutlineButtons.OUTLINE.editorSelected,
+    globalShadow.editorChecked and dialog.uiFontOutlineDropdown.dropdownValue == "OUTLINE",
     "Layout lost font-style defaults"
 )
 local globalFontObjects = #context.objects
 for _, performance in ipairs({ false, true }) do
     display.Set("performanceMode", performance)
     for _, outline in ipairs({ "", "OUTLINE", "THICKOUTLINE" }) do
-        local selected = assert(dialog.uiFontOutlineButtons[outline], "Layout omitted an outline choice")
-        context:Call(selected, "OnClick")
+        SelectChoice(dialog.uiFontOutlineDropdown, outline)
         editor.Display()
-        assert(
-            display.Get("uiFontOutline") == outline and not env.SurvivorsDragonUiDisplay,
-            "outline saved before Confirm"
-        )
-        for value, button in pairs(dialog.uiFontOutlineButtons) do
-            assert(button.editorSelected == (value == outline), "outline selection did not refresh")
-        end
-        local locks = selected.lockWrites
+        assert(display.Get("uiFontOutline") == outline and not env.SurvivorsDragonUiDisplay)
+        assert(dialog.uiFontOutlineDropdown.dropdownValue == outline)
         context:ResetCounts()
-        context:Call(selected, "OnClick")
+        dialog.uiFontOutlineDropdown:SetValue(outline)
         editor.Display()
         context:NoPresentationWrites()
-        assert(selected.lockWrites == locks, "selected outline repeated native highlight writes")
     end
     context:Call(globalShadow, "OnClick")
     editor.Display()
@@ -917,7 +933,7 @@ dialog.navigation.Search("thick outline")
 local foundLayoutOutline
 for _, result in ipairs(dialog.navigation.results) do
     if result.group == "layout" then
-        assert(result.entry.offset == 488, "global outline search does not redirect to its controls")
+        assert(result.entry.offset == 338, "global outline search does not redirect to its controls")
         foundLayoutOutline = true
     end
 end
@@ -927,7 +943,7 @@ dialog.navigation.Search("black shadow")
 local foundLayoutShadow
 for _, result in ipairs(dialog.navigation.results) do
     if result.group == "layout" then
-        assert(result.target == "uiFontShadow" and result.entry.offset == 552, "global shadow search lost its control")
+        assert(result.target == "uiFontShadow" and result.entry.offset == 454, "global shadow search lost its control")
         foundLayoutShadow = true
     end
 end
@@ -961,11 +977,11 @@ display.BeginEdit()
 dialog:Show()
 assert(display.Get("uiFont") == "default", "Cancel retained the Layout font")
 dialog.navigation.Select("layout")
-assert(dialog.uiFontButtons.default.editorSelected, "Layout did not refresh the discarded font on re-entry")
+assert(dialog.uiFontDropdown.dropdownValue == "default", "Layout did not refresh the discarded font on re-entry")
 assert(
     display.Get("uiFontOutline") == "OUTLINE"
         and display.Get("uiFontShadow")
-        and dialog.uiFontOutlineButtons.OUTLINE.editorSelected
+        and dialog.uiFontOutlineDropdown.dropdownValue == "OUTLINE"
         and globalShadow.editorChecked,
     "Cancel/reopen retained draft outline or shadow"
 )
@@ -1047,62 +1063,77 @@ for _, button in ipairs(dialog.sctDistanceSettings.controls) do
     assert(not button.mouse, "off scaling retained distance input")
 end
 display.Set("sctDistanceScaling", true)
+dialog.navigation.Search("Group damage numbers")
+assert(
+    #dialog.navigation.results >= 1 and dialog.navigation.results[1].target == "sctGroupDamage",
+    "grouping toggle was absent from search"
+)
+dialog.navigation.OpenResult(1)
+local grouping = assert(dialog.sctGroupSettings)
+local groupingToggle = assert(env.displayControls.sctGroupDamage)
+assert(not display.Get("sctGroupDamage") and not grouping.dropdown.mouse, "grouping input did not start off")
+dialog.navigation.Search("Show hit count")
+assert(
+    #dialog.navigation.results == 1 and dialog.navigation.results[1].target == "sctShowGroupCount",
+    "hit-count toggle was absent from search"
+)
+dialog.navigation.OpenResult(1)
+local countToggle = assert(env.displayControls.sctShowGroupCount)
+assert(countToggle.editorChecked and not countToggle.mouse, "hit count should default on and depend on grouping")
+context:Call(groupingToggle, "OnClick")
+assert(grouping.dropdown.mouse and grouping.dropdown.dropdownValue == 0.5, "grouping window did not become available")
+assert(countToggle.mouse, "enabled grouping kept the hit-count toggle disabled")
+context:Call(countToggle, "OnClick")
+assert(not display.Get("sctShowGroupCount") and not env.SurvivorsDragonUiDisplay, "hit count did not preview")
+SelectChoice(grouping.dropdown, 0.75)
+assert(display.Get("sctGroupWindow") == 0.75 and not env.SurvivorsDragonUiDisplay, "window selection did not preview")
+context:Call(groupingToggle, "OnClick")
+assert(not grouping.dropdown.mouse and display.Get("sctGroupWindow") == 0.75, "off grouping lost its selected window")
+assert(not countToggle.mouse and not countToggle.editorChecked, "off grouping lost its hit-count choice")
+context:Call(groupingToggle, "OnClick")
+dialog.navigation.ClearSearch()
 context:Call(env.displayControls.sctShortNumbers, "OnClick")
 assert(not display.Get("sctShortNumbers") and not env.SurvivorsDragonUiDisplay, "full numbers did not preview")
 local function AssertSctFont(selected)
-    assert(display.Get("sctFont") == selected, "font did not preview through the existing display transaction")
-    for value, button in pairs(dialog.sctFontButtons) do
-        assert(button.editorSelected == (value == selected), "font selection left the other choice selected")
-        assert(button.highlightLocked == (value == selected), "font selection left the other native highlight locked")
-    end
+    assert(display.Get("sctFont") == selected and dialog.sctFontDropdown.dropdownValue == selected)
     assert(not env.SurvivorsDragonUiDisplay, "font choice saved before Confirm")
 end
 local function AssertSctStyle(selected)
-    assert(display.Get("sctStyle") == selected, "style did not preview through the existing display transaction")
-    for value, button in pairs(dialog.sctStyleButtons) do
-        assert(button.editorSelected == (value == selected), "style selection left another choice selected")
-        assert(button.highlightLocked == (value == selected), "style selection left another native highlight locked")
-    end
+    assert(display.Get("sctStyle") == selected and dialog.sctStyleDropdown.dropdownValue == selected)
 end
 AssertSctFont("default")
 local sctObjects = #context.objects
 for _, performance in ipairs({ false, true }) do
     display.Set("performanceMode", performance)
     for _, font in ipairs({ "default", "diablo", "default", "diablo" }) do
-        context:Call(dialog.sctFontButtons[font], "OnClick")
+        SelectChoice(dialog.sctFontDropdown, font)
         AssertSctFont(font)
     end
-    local defaultLocks = dialog.sctFontButtons.default.lockWrites
-    local diabloLocks = dialog.sctFontButtons.diablo.lockWrites
     context:ResetCounts()
-    context:Call(dialog.sctFontButtons.diablo, "OnClick")
-    AssertSctFont("diablo")
+    dialog.sctFontDropdown:SetValue("diablo")
+    editor.Display()
     context:NoPresentationWrites()
-    assert(
-        dialog.sctFontButtons.default.lockWrites == defaultLocks
-            and dialog.sctFontButtons.diablo.lockWrites == diabloLocks,
-        "clicking the selected font repeated native highlight writes"
-    )
     dialog:Hide()
     context:ResetCounts()
     display.Set("sctFont", "default")
-    assert(
-        dialog.sctFontButtons.diablo.editorSelected and not dialog.sctFontButtons.default.editorSelected,
-        "hidden font change performed deferred presentation"
-    )
-    assert(
-        not dialog.sctFontButtons.default.highlightLocked and not dialog.sctFontButtons.diablo.highlightLocked,
-        "hidden font change relocked a native highlight"
-    )
+    assert(dialog.sctFontDropdown.dropdownValue == "diablo", "hidden font change performed presentation")
     context:NoPresentationWrites()
     dialog:Show()
     AssertSctFont("default")
-    context:Call(dialog.sctFontButtons.diablo, "OnClick")
+    SelectChoice(dialog.sctFontDropdown, "diablo")
     AssertSctFont("diablo")
 end
 assert(#context.objects == sctObjects, "font selection or reopen allocated another control")
+for _, mode in ipairs({ "off", "default", "on" }) do
+    SelectChoice(dialog.sctModeDropdown, mode)
+    editor.SCT()
+    assert(outgoingMode == mode and dialog.sctModeDropdown.dropdownValue == mode)
+    assert(dialog.sctStyleDropdown.dropdownEnabled == (mode == "on"))
+    assert(dialog.sctFontDropdown.dropdownEnabled == (mode == "on"))
+    assert(countToggle.mouse == (mode == "on") and not countToggle.editorChecked)
+end
 AssertSctStyle("diablo")
-context:Call(dialog.sctStyleButtons.enemy, "OnClick")
+SelectChoice(dialog.sctStyleDropdown, "enemy")
 AssertSctStyle("enemy")
 display.FinishEdit(false)
 AssertSctStyle("diablo")
@@ -1110,6 +1141,9 @@ AssertSctFont("default")
 assert(
     display.Get("sctShortNumbers")
         and not display.Get("sctDistanceScaling")
+        and not display.Get("sctGroupDamage")
+        and display.Get("sctShowGroupCount")
+        and display.Get("sctGroupWindow") == 0.5
         and display.Get("sctScale") == 0.9
         and not display.Get("performanceMode"),
     "Cancel did not restore default combat choices"
@@ -1141,9 +1175,9 @@ do
     end
     local ability, proc = assert(controls["Ability color"]), assert(controls["Proc color"])
     local initial = display.Snapshot()
-    local modes = dialog.displayModes.meterColorMode.buttons
+    local modes = dialog.displayModes.meterColorMode.dropdown
     assert(display.Get("meterColorMode") == "default" and not ability.available and not proc.available)
-    context:Call(modes.custom, "OnClick")
+    SelectChoice(modes, "custom")
     assert(ability.available and proc.available and ability.input.keyboard, "custom colors did not enable RGB input")
     assert(not ability.pickerAvailable, "missing native picker disabled the hex fallback incorrectly")
     dialog.navigation.Search("Proc color")
@@ -1211,9 +1245,9 @@ do
     picker.rgb = { 1, 0, 0 }
     hiddenChange()
     assert(display.Get("meterProcColor") == "00FF00", "a hidden picker callback changed the preview")
-    context:Call(modes.default, "OnClick")
+    SelectChoice(modes, "default")
     assert(not picker:IsShown() and not proc.available and display.Get("meterProcColor") == "00FF00")
-    context:Call(modes.custom, "OnClick")
+    SelectChoice(modes, "custom")
     assert(proc.available and display.Get("meterProcColor") == "00FF00", "Default lost the retained custom color")
     context:Call(proc.pickerButton, "OnClick")
     local retiredChange = picker.func
@@ -1312,6 +1346,35 @@ for _, key in ipairs({ "meter", "action", "encounters", "map", "interface", "pro
         "live timer update ignored the selected category's sample visibility"
     )
 end
+do
+    dialog.navigation.Search("Combine boss bars")
+    assert(
+        #dialog.navigation.results == 1 and dialog.navigation.results[1].target == "bossCombineBars",
+        "combined boss layout was missing from settings search"
+    )
+    dialog.navigation.OpenResult(1)
+    local combinedBosses = assert(env.displayControls.bossCombineBars, "missing combined boss checkbox")
+    assert(not combinedBosses.editorChecked and not display.Get("bossCombineBars"), "combined bosses defaulted on")
+    context:Call(combinedBosses, "OnClick")
+    editor.Display()
+    assert(combinedBosses.editorChecked and display.Get("bossCombineBars"), "combined bosses did not preview")
+    assert(not env.SurvivorsDragonUiDisplay, "combined bosses saved before Confirm")
+    display.Set("customBossBars", false)
+    editor.Display()
+    assert(
+        not combinedBosses.mouse and combinedBosses:GetAlpha() == 0.45 and combinedBosses.editorChecked,
+        "native boss bars did not disable and retain the combined choice"
+    )
+    display.FinishEdit(false)
+    display.BeginEdit()
+    editor.Display()
+    assert(not combinedBosses.editorChecked and display.Get("customBossBars"), "Cancel retained combined boss previews")
+    dialog.navigation.Search("")
+end
+-- Prepare every lazy category before counting; the next walk checks reuse.
+for _, key in ipairs(categoryKeys) do
+    dialog.navigation.Select(key)
+end
 local pageCount = 0
 for _ in pairs(pages) do
     pageCount = pageCount + 1
@@ -1330,7 +1393,7 @@ for _, key in ipairs(categoryKeys) do
         "an editor category replaced or hid the shared sidebar search"
     )
 end
-assert(#context.objects == allCategoryObjects, "revisiting all nine categories allocated another sidebar search")
+assert(#context.objects == allCategoryObjects, "revisiting all ten categories allocated another sidebar search")
 assert(env.fontSampleClock and not env.fontMenu, "Encounters eagerly prepared the closed font popup")
 local affixes, shadow = env.displayControls.attachAffixes, env.shadowControl
 assert(
@@ -1441,21 +1504,21 @@ for _, group in ipairs(dialog.worldIconRanges) do
     end
 end
 assert(cacheRange and bossRange and not cacheRange.enabled and not bossRange.enabled)
-context:Call(cacheModes.buttons.near, "OnClick")
+SelectChoice(cacheModes.dropdown, "near")
 editor.Display()
 assert(display.Get("worldCacheIconMode") == "near" and cacheRange.enabled, "Nearby did not enable its cutoff")
 context:Call(cacheRange.controls[2], "OnClick")
 assert(display.Get("worldCacheIconDistance") == 45, "cutoff did not preview in five-yard steps")
 display.Set("worldCacheIcons", false)
 editor.Display()
-assert(not cacheModes.buttons.near.mouse and not cacheRange.enabled, "cache-off retained distance input")
-context:Call(cacheModes.buttons.far, "OnClick")
+assert(not cacheModes.dropdown.mouse and not cacheRange.enabled, "cache-off retained distance input")
+SelectChoice(cacheModes.dropdown, "far")
 context:Call(cacheRange.controls[2], "OnClick")
 assert(display.Get("worldCacheIconMode") == "near" and display.Get("worldCacheIconDistance") == 45)
 display.Set("worldCacheIcons", true)
 display.Set("worldBossIcons", true)
 editor.Display()
-context:Call(bossModes.buttons.far, "OnClick")
+SelectChoice(bossModes.dropdown, "far")
 editor.Display()
 assert(cacheRange.enabled and bossRange.enabled and display.Get("worldBossIconMode") == "far")
 dialog.navigation.Search("Nearby only")
@@ -1493,20 +1556,89 @@ for _, key in ipairs({
     "attachXP",
     "xpShowText",
     "attachTally",
-    "attachJewelry",
 }) do
     local control = assert(env.displayControls[key], "missing native-bar dependent control: " .. key)
     assert(control:GetAlpha() == 0.45 and not control.mouse, "native bar left a custom-bar option interactive: " .. key)
 end
+dialog.navigation.Select("jewelry")
+editor.Display()
+local attachJewelry = assert(env.displayControls.attachJewelry, "Jewelry did not prepare its attachment control")
+assert(attachJewelry:GetAlpha() == 0.45 and not attachJewelry.mouse, "native bar left jewelry attachment interactive")
+assert(env.displayControls.hideNativeBuild:GetParent() == pages.jewelry, "native build control stayed on Action bar")
+local customJewelry = assert(env.displayControls.jewelryCustomOrder)
+local jewelryChoices = assert(dialog.jewelryOrderSettings)
+assert(not customJewelry.editorChecked and not jewelryChoices.enabled and #jewelryChoices.controls == 5)
+assert(not dialog.editorDropdownMenu:IsShown(), "Jewelry retained a dropdown from another page")
+context:Call(customJewelry, "OnClick")
+editor.Display()
+assert(jewelryChoices.enabled, "custom order incorrectly depends on the SDUI action bar")
+SelectChoice(jewelryChoices.rows[1].button, "4")
+local jewelryMenu = assert(dialog.editorDropdownMenu)
+editor.Display()
+assert(display.Get("jewelryOrder") == "42315", "position choice did not swap equipped slots")
+assert(jewelryChoices.rows[1].value == "4" and jewelryChoices.rows[4].value == "1")
+assert(jewelryChoices.rows[1].button.label:GetText() == locale.Text("Trinket 1"))
+local jewelryObjects = #context.objects
+context:Call(jewelryChoices.rows[5].button, "OnClick")
+assert(dialog.editorDropdownMenu == jewelryMenu and #context.objects == jewelryObjects)
+context:Call(jewelryMenu, "OnClick")
+assert(not jewelryMenu:IsShown() and not jewelryMenu.owner, "outside click retained the dropdown")
+context:Call(jewelryChoices.rows[2].button, "OnClick")
+dialog.navigation.Select("action")
+assert(not jewelryMenu:IsShown(), "leaving Jewelry retained its dropdown")
+dialog.navigation.Select("jewelry")
+editor.Display()
+context:Call(jewelryChoices.rows[3].button, "OnClick")
+context:Call(customJewelry, "OnClick")
+editor.Display()
+assert(not jewelryMenu:IsShown() and not jewelryChoices.enabled, "disabling custom order retained its dropdown")
+context:Call(customJewelry, "OnClick")
+editor.Display()
+context:Call(jewelryChoices.rows[2].button, "OnClick")
+assert(not env.SurvivorsDragonUiDisplay.jewelryCustomOrder, "custom jewelry order saved before Confirm")
 assert(display.Get("attachJewelry") and display.Get("attachTally"), "native preview rewrote attachment preferences")
 env.DFRL.layout.CancelEdit()
+assert(not jewelryMenu:IsShown() and not jewelryMenu.owner, "Cancel retained the jewelry dropdown")
 assert(display.Get("customActionBar") and display.Get("attachJewelry") and display.Get("attachTally"))
+assert(
+    not display.Get("jewelryCustomOrder") and display.Get("jewelryOrder") == "12345",
+    "Cancel retained jewelry order"
+)
 display.BeginEdit()
 dialog:Show()
 dialog.navigation.Select("action")
 editor.Display()
 assert(customActionBar.editorChecked, "Cancel did not restore the action-bar toggle")
 env.DFRL.layout.CancelEdit()
+do
+    display.BeginEdit()
+    dialog:Show()
+    dialog.navigation.Select("action")
+    local style = assert(dialog.tallyStyleDropdown)
+    for _, entry in ipairs(env.DFRL.tallyStyles) do
+        SelectChoice(style, entry.id)
+        assert(display.Get("tallyStyle") == entry.id and style.dropdownValue == entry.id)
+    end
+    local pooled = dialog.editorDropdownMenu
+    local firstChoice = pooled.buttons[1]
+    dialog.navigation.Select("encounters")
+    SelectChoice(dialog.timerOutlineDropdown, "THICKOUTLINE")
+    assert(env.fontDraft.outline == "THICKOUTLINE" and dialog.timerOutlineDropdown.dropdownValue == "THICKOUTLINE")
+    dialog.navigation.Select("interface")
+    local loot = dialog.displayModes.lootMode.dropdown
+    for _, mode in ipairs({ "game", "off", "sdui" }) do
+        SelectChoice(loot, mode)
+        editor.Display()
+        assert(display.Get("lootMode") == mode and loot.dropdownEnabled, "loot dropdown disabled its own mode selector")
+    end
+    assert(
+        dialog.editorDropdownMenu == pooled
+            and pooled.buttons[1] == firstChoice
+            and #pooled.buttons == #env.DFRL.tallyStyles,
+        "dropdown lists grew beyond the largest prepared choice list"
+    )
+    env.DFRL.layout.CancelEdit()
+end
 local function ProfileSaveControls()
     local profiles = env.DFRL.profiles
     local function Open()

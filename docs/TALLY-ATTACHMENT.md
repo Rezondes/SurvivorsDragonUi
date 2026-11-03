@@ -1,11 +1,10 @@
 # Tally attachment and appearance
 
-With **Performance Mode** on, the kill and gold numbers refresh every five
-seconds. Cache cost keeps its normal refresh speed. Turning Performance Mode
-off restores the usual updates. The first display and a new run use current
-values immediately; changing the style or attachment does not restart the
-five-second interval. These are display changes only: native counters, cache
-affordability data and HUD ownership remain current.
+Kill and gold numbers refresh every 250 milliseconds with **Performance Mode**
+off and every five seconds with it on. The first display, a new run and a mode
+change show current values immediately. Changing the style or attachment keeps
+the current refresh deadline. Cache cost and affordability follow the shared
+HUD reader in both modes.
 
 The **Kills, Gold & Caches** page in `/sdui` owns the selected style, attachment,
 counter visibility and affordability highlight. The same style selection works
@@ -19,6 +18,12 @@ preparation input retains the original pixels. The shared
 fitter reserves its icon width, the tooltip anchors above the icon, and the
 affordability halo includes both the coin and amount with its original offset.
 
+The five highlight textures and eight number copies prepare only on the first
+visible, affordable highlight with Performance Mode off. First use copies the
+current fitted font, number and bounds. The retained pool recovers on Show and
+mode changes without new regions. The original thirty-Hz animation skips only
+unchanged number-opacity writes; its appearance and timing remain unchanged.
+
 The cache-cost counter uses the supplied chest artwork from
 `media/tex/waypoint/Chest.blp`, shared with cache guidance and minimap markers.
 It retains its 18-unit icon, full texture coordinates, four-unit text gap,
@@ -27,6 +32,9 @@ native `AZS_RUN.chest` value and tooltip above the icon.
 ## Attached and detached artwork
 
 Attached artwork has an open top, sharing the action bar's lower silver edge.
+Its top overlaps that bevel by one unit at the 300-unit reference width,
+scaling with the artwork to close the gap at the soft edge. The action-bar
+edit bounds follow the shifted bottom of the attached strip.
 Detached artwork has a complete matching surround. The shared registry in
 `core/tally.lua` owns each mode's texture, full extent and counter center.
 `tallyAttachment.Refresh` selects these together whenever attachment or style

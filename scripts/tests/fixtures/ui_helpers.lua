@@ -79,6 +79,10 @@ function methods:SetFrameLevel(value)
     Write(self, "SetFrameLevel")
     self.level = value
 end
+function methods:SetScrollChild(child)
+    Write(self, "SetScrollChild")
+    self.scrollChild = child
+end
 function methods:CreateTexture(name) return self.context:Object("Texture", name, self) end
 function methods:CreateFontString(name) return self.context:Object("FontString", name, self) end
 
@@ -278,7 +282,7 @@ function H.New()
         context.layoutFrame = frame
         context.layoutMask = context:Object("Frame", nil, env.UIParent)
         frame.parent = context.layoutMask
-        if anchor then anchor() end
+        if anchor then anchor(frame) end
         if visibility[name] then visibility[name](true) end
     end
     function context:SetSetting(name, value)

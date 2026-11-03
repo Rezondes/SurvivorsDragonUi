@@ -38,11 +38,13 @@ env.tostring = function(value)
     return tostring(value)
 end
 env.FitTallyField = function(field)
+    if field.enabled == false then return end
     context.fitted = context.fitted or {}
     context.fitted[field.key] = field.text:GetText()
     context.reads.fit = (context.reads.fit or 0) + 1
 end
 env.SetGoldHighlight = function(value) context.highlight = value end
+env.goldField = { glowRunning = true, UpdateGlow = function() context.glowGold = Value("gold") end }
 env.TakeOver = function(part)
     assert(part == "tally", "tally sampling changed another native HUD owner")
     context.reads.ownership = (context.reads.ownership or 0) + 1
@@ -107,9 +109,30 @@ context:ResetCounts()
 api.Update()
 assert(Value("kills") == "10" and Value("gold") == "200" and Value("chest") == "300")
 Values(11, 201, 301)
+assert(not api.Advance(255 / 1024), "normal-mode counters were due before 250 ms")
 api.Update()
+assert(Value("kills") == "10" and Value("gold") == "200" and Value("chest") == "301")
+assert(api.Advance(1 / 1024), "normal-mode counters were not due at 250 ms")
+Values(11, 201, 302)
+context:ResetCounts()
+api.Update(true)
 assert(Value("kills") == "11" and Value("gold") == "201" and Value("chest") == "301")
-assert(not context.reads.clock and context.reads.formats == 6, "normal mode acquired a counter throttle")
+assert(context.glowGold == "201", "counter-only refresh left the old glowing gold number")
+assert(not context.reads.clock and not context.reads.ownership and context.reads.formats == 2)
+Values(11, 201, 301)
+context:ResetCounts()
+for _ = 1, 10 do
+    api.Update()
+end
+assert(not context.reads.formats, "unchanged normal-mode counters repeated integer formatting")
+assert(context.reads.ownership == 10 and context.reads.fit == 30, "counter reuse skipped ownership or font retries")
+env.tallyFields[1].text.text = "native reset"
+assert(api.Advance(0.25))
+api.Update()
+assert(Value("kills") == "11" and not context.reads.formats, "cached integer text lost actual-state repair")
+Values(11.9, 201.9, 301.9)
+api.Update()
+assert(not context.reads.formats, "equal final integers were formatted again")
 
 context.now = 10
 Mode(true)
@@ -127,10 +150,14 @@ assert(context.reads.fit == 3 and context.reads.ownership == 1, "counter throttl
 context.now = 15
 api.Update()
 assert(Value("kills") == "21" and Value("gold") == "401", "exact five-second deadline did not sample current counters")
+context.now = 20
+context:ResetCounts()
+api.Update()
+assert(not context.reads.formats, "unchanged Performance Mode samples reformatted cached integers")
 
 -- Ordinary mode notifications and style/attachment Hide/Show must not reset
 -- the same active sampling window and expose more frequent numeric changes.
-context.now = 16
+context.now = 21
 Mode(true)
 env.tally:Hide()
 env.tally:Show()
@@ -142,7 +169,7 @@ context:ResetCounts()
 api.Update()
 assert(Value("kills") == "22" and Value("gold") == "402", "leaving Performance Mode retained held numbers")
 assert(not context.reads.clock, "normal-mode restoration still sampled the throttle clock")
-context.now = 16.5
+context.now = 21.5
 Mode(true)
 Values(23, 403, 603)
 api.Update()
@@ -214,7 +241,28 @@ context.now = 1
 Values(1, 2, 3)
 api.Update()
 assert(Value("kills") == "1" and Value("gold") == "2", "UI clock rollback permanently froze held counters")
+local kills = env.tallyFields[1]
+for _, performance in ipairs({ false, true }) do
+    Mode(performance)
+    local previous = kills.text:GetText()
+    local reads = 0
+    local getText = kills.text.GetText
+    function kills.text:GetText()
+        reads = reads + 1
+        return getText(self)
+    end
+    kills.enabled = false
+    local sample = performance and 33 or 32
+    Values(sample, 2, 3)
+    api.Update()
+    assert(reads == 0 and getText(kills.text) == previous, "disabled counter touched its native label")
+    assert(kills.counterValue == sample and not kills.counterText, "disabled counter lost or formatted its sample")
+    kills.enabled = true
+    api.Paint(kills)
+    assert(Value("kills") == tostring(sample), "re-enabled counter did not paint the latest accepted sample")
+    kills.text.GetText = getText
+end
 assert(table.getn(context.objects) == allocated, "cadence changes allocated drawing objects")
 print(
-    "PASS only Performance Mode kill/gold text uses five-second sampling with live cache cost and safe lifecycle resets"
+    "PASS kill/gold text uses 250-ms normal and five-second Performance Mode sampling with live cache cost and safe resets"
 )

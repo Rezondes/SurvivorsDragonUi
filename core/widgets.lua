@@ -255,9 +255,13 @@ end
 -- Encounter health uses the same fill, label style and native values everywhere.
 DFRL.tools.EncounterHealthStyle = { red = 0.86, green = 0.12, blue = 0.1, alpha = 1, fontSize = 12 }
 
-function DFRL.tools.StyleEncounterHealth(bar, label)
+function DFRL.tools.StyleEncounterHealth(bar, label, fill)
     local style = T.EncounterHealthStyle
-    bar:SetStatusBarColor(style.red, style.green, style.blue, style.alpha)
+    if fill then
+        fill.SetColor(style.red, style.green, style.blue, style.alpha)
+    else
+        bar:SetStatusBarColor(style.red, style.green, style.blue, style.alpha)
+    end
     T.SetFont(label, style.fontSize, "OUTLINE")
     label:SetTextColor(1, 1, 1)
 end
@@ -310,8 +314,20 @@ function DFRL.tools.EncounterHealthText(current, maximum, showCurrent, showMaxim
     return text
 end
 
-function DFRL.tools.SetEncounterHealthText(label, current, maximum, showCurrent, showMaximum, shorten, showPercentage)
-    local text = T.EncounterHealthText(current, maximum, showCurrent, showMaximum, label, shorten, showPercentage)
+function DFRL.tools.SetEncounterHealthText(
+    label,
+    current,
+    maximum,
+    showCurrent,
+    showMaximum,
+    shorten,
+    showPercentage,
+    preparedText
+)
+    local text = preparedText
+    if text == nil then
+        text = T.EncounterHealthText(current, maximum, showCurrent, showMaximum, label, shorten, showPercentage)
+    end
     T.SetTextIfChanged(label, text)
     if text == "" then
         if label:IsShown() then label:Hide() end
@@ -394,8 +410,9 @@ function DFRL.tools.BindUnitHealthText(bar, label, unit, hideDead, showDeathStat
         local current, maximum, status
         local valueShown = DFRL.display.Get("showHealthValue")
         local percentShown = DFRL.display.Get("showHealthPercentage")
+        local numericShown = valueShown or percentShown
         local shorten = DFRL.display.Get("unitShortHealth") ~= false
-        if UnitExists(unit) then
+        if (numericShown or showDeathState) and UnitExists(unit) then
             local dead, ghost
             if hideDead or showDeathState then
                 local deadValue, ghostValue = UnitIsDead(unit), UnitIsGhost(unit)
@@ -404,7 +421,7 @@ function DFRL.tools.BindUnitHealthText(bar, label, unit, hideDead, showDeathStat
             end
             if dead or ghost then
                 if showDeathState then status = DFRL.locale.Text(ghost and "Ghost" or "Dead") end
-            else
+            elseif numericShown then
                 current, maximum = T.GetUnitHealth(unit, not percentShown)
                 if type(current) ~= "number" or current < 0 or current - current ~= 0 then current = nil end
             end
@@ -952,6 +969,24 @@ function DFRL.tools.CreateUnitBorder(frame, healthBar, portraitTexture, backgrou
             strip:SetTexture(path)
         end
         local name = string.gsub(path, "^.*[\\/]", "")
+        if mirrored then
+            -- Close the pointed rim's cropped columns above/below the health
+            -- opening without restoring its obsolete divider inside that opening.
+            local width = 256 - 33 - (name == "UI-TargetingFrameDF.blp" and portraitWidth or 104)
+            for _, piece in ipairs(widthPieces) do
+                if piece.stretch and piece.width ~= width then
+                    piece.width, piece.x = width, 256 - 33 - width
+                    piece.texture:SetTexCoord(
+                        (33 + width) / 256,
+                        33 / 256,
+                        -piece.y / 128,
+                        (piece.texture:GetHeight() - piece.y) / 128
+                    )
+                    piece.texture:SetWidth(width + widthDelta)
+                    UnitPoint(piece.texture, "TOPLEFT", frame, piece.x, piece.y)
+                end
+            end
+        end
         artworkBounds = unitBorderBounds[name] or fullUnitBorderBounds
         RefreshEditRegion()
     end

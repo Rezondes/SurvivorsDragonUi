@@ -1,17 +1,19 @@
-"""Prepare transparent gold jewelry rims and circular cooldown artwork.
+"""Prepare jewelry rarity rims and the cold-lit housing.
 
 Requires Pillow and a scratch source directory containing the pinned
-bagborder2.blp listed in third_party/Jewelry-ARTWORK.md. No item icons,
-labels, panel backgrounds or ornaments are baked into the artwork.
+bagborder2.blp listed in third_party/Jewelry-ARTWORK.md. The retained
+Runecarver.tga input supplies only static housing artwork; item icons and labels
+are never baked into it.
 """
 
 import argparse
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from prepare_client_textures import image_from_bytes
+from prepare_jewelry_runecarver import SILVER_PALETTE, gemmed_housing
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,18 +34,6 @@ def prepare_pet_rim(canvas):
     canvas.paste(rim, (576, 56))
 
 
-def prepare_quality_rim(canvas):
-    """Add a tintable copy; retain the stock gold and pet/meter crops exactly."""
-    rim = canvas.crop((106, 56, 178, 128))
-    pixels = rim.load()
-    for y in range(72):
-        for x in range(72):
-            red, green, blue, alpha = pixels[x, y]
-            value = max(red, green, blue)
-            pixels[x, y] = (value, value, value, alpha)
-    canvas.paste(rim, (664, 56))
-
-
 def prepare(sources, output):
     ring = rgba(sources / "bagborder2.blp")
     canvas = Image.new("RGBA", (1024, 256))
@@ -51,21 +41,11 @@ def prepare(sources, output):
     for index in range(5):
         canvas.alpha_composite(rim, (98 + index * 88, 50))
     prepare_pet_rim(canvas)
-    prepare_quality_rim(canvas)
+    housing = rgba(ROOT / "media/tex/jewelry/Runecarver.tga")
+    canvas.paste(housing, (896, 0))
+    canvas.paste(gemmed_housing(housing, SILVER_PALETTE), (896, 128))
     output.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output, compression=None)
-
-    # The 64 frames shade only the circular icon, including at cooldown start.
-    # Transparent cell padding prevents neighboring atlas cells bleeding in.
-    atlas = Image.new("RGBA", (512, 512))
-    for index in range(1, 64):
-        cell = Image.new("RGBA", (256, 256))
-        ImageDraw.Draw(cell).pieslice(
-            (4, 4, 251, 251), -90, -90 + 360 * index / 63, fill=(0, 0, 0, 160)
-        )
-        cell = cell.resize((64, 64), Image.Resampling.LANCZOS)
-        atlas.alpha_composite(cell, ((index % 8) * 64, (index // 8) * 64))
-    atlas.save(output.with_name("Cooldown.tga"), compression=None)
 
 
 if __name__ == "__main__":

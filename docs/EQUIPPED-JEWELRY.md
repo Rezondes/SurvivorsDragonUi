@@ -1,29 +1,45 @@
 # Equipped jewelry
 
-The user selected action-bar attachment design **4 — Thin shared bezel**, with the extra inner/lower curved line beneath the gold circles removed. The original bar artwork is retained, adding only five upper socket extensions. There is no jewelry panel, permanent title or side ornament. The row uses the character's five normal equipment slots, ordered left to right as first ring, second ring, necklace, first trinket and second trinket. The necklace occupies the middle socket in both attached and detached modes, including its empty-slot placeholder. It is independent of the native six-pickup run build and does not add an ability row or infer run jewelry from worn gear, stats or chat.
+The Runecarver artwork uses grey-metal housings matched to the action bar. Runecarver supplies the surround: the old circle is removed from the top and sides, while attached jewelry keeps the small bottom arch that joins the bar. Equipped items add a crown gem, three socket stones and a soft outer halo in their rarity color. The row meets the original straight action-bar edge, with no jewelry panel, permanent title or side ornament. It uses the character's five normal equipment slots, ordered left to right as first ring, second ring, necklace, first trinket and second trinket. By default, the necklace occupies the middle socket in both attached and detached modes, including its empty-slot placeholder. It is independent of the native six-pickup run build and does not add an ability row or infer run jewelry from worn gear, stats or chat.
+
+## Settings and placement
+
+Open `/sdui` → **Jewelry** for equipped-jewelry visibility, attachment and the
+game's original jewelry/ability rows. These controls now live together on this
+page rather than under Action bar.
+
+**Custom jewelry order** is off by default, keeping **ring → ring → neck →
+trinket → trinket**. Turn it on to choose the item from a dropdown for each of the five positions,
+from left to right. Choosing an item swaps its position with the selected item,
+so each equipped slot appears once. The order works attached or detached.
+Turning it off restores the original order while retaining your custom choice.
+
+Changes preview immediately. Confirm saves the choice; Cancel, world leave,
+logout and reload discard an unconfirmed change. Profiles include the order,
+and both full resets turn custom order off. Disabling equipped jewelry dims its
+custom-order controls without clearing the choice. Item artwork, size, rarity
+effects and effects-only hover text retain their behavior.
 
 ## Data and interaction
 
-`modules/ui/jewelry.lua` resolves `NeckSlot`, `Finger0Slot`, `Finger1Slot`, `Trinket0Slot` and `Trinket1Slot` through `GetInventorySlotInfo`, requiring five distinct valid native IDs. `GetInventoryItemTexture("player", id)` supplies each current icon. Item art uses a centered texture crop with exactly 5% added magnification in both attached and detached modes; circle and rim dimensions are unchanged. No sample equipped items, item IDs, item names, item statistics, invented ranks or sixth slot are shipped.
+`modules/ui/jewelry.lua` resolves `NeckSlot`, `Finger0Slot`, `Finger1Slot`, `Trinket0Slot` and `Trinket1Slot` through `GetInventorySlotInfo`, requiring five distinct valid native IDs. `GetInventoryItemTexture("player", id)` supplies each current icon. Item art retains its centered 5% source magnification in both modes. The rendered icon and empty-slot picture use a 33.90-unit artwork box centered on the unchanged 32-unit hover frame, giving the Runecarver opening clearance. Sixteen bands include the formerly missing top and bottom caps, preserving the complete selected vertical image range without adding another circle. No sample equipped items, item IDs, item names, item statistics, invented ranks or sixth slot are shipped.
 
-Empty sockets use the selected original WoW inventory pictures for the necklace, both rings and both trinkets over subtle charcoal circles. The complete source interiors are scaled down and centered with clearance inside the gold rims, so the chain and trinket are not clipped by the circular opening. Source pixels and preparation are recorded in [Jewelry-ARTWORK.md](../third_party/Jewelry-ARTWORK.md). The existing gold rims, silver socket artwork, spacing and positions remain unchanged in attached and detached modes. A successful native texture read returning nil or an empty string shows the matching placeholder; an actual item texture replaces it at the existing refresh cadence. Read failures keep the icon area clear. Placeholders are cosmetic artwork, never stored as equipped-item textures: empty slots clear effects and cooldown state and do not call the item tooltip reader or inventory cooldown getter. Disable, missing required APIs/player and world cleanup hide them with the rest of the row. No new setting or saved state is added.
+Empty sockets use the selected original WoW inventory pictures for the necklace, both rings and both trinkets over subtle charcoal circles. The complete source interiors are scaled down and centered with clearance inside the Runecarver housings, so the chain and trinket are not clipped by the circular opening. Source pixels and preparation are recorded in [Jewelry-ARTWORK.md](../third_party/Jewelry-ARTWORK.md). The Runecarver housings, spacing and positions remain the same in attached and detached modes. A successful native texture read returning nil or an empty string shows the matching placeholder; an actual item texture replaces it at the existing refresh cadence. Read failures keep the icon area clear. Placeholders are cosmetic artwork, never stored as equipped-item textures: empty slots clear effects and skip the item tooltip reader. Disable, missing required APIs/player and world cleanup hide them with the rest of the row. No new setting or saved state is added.
 
-Equipped items use their native rarity color for the circular rim and all text
-inside their effects-only hover card. `GetInventoryItemQuality("player", id)`
-supplies the rank, including poor and common items; `GetItemQualityColor` or the
-native `ITEM_QUALITYn_COLOR` table supplies RGB. Missing, failed or invalid
-metadata keeps the original gold rim and existing green hover text while the
-normal equipment refresh retries. It never keeps a removed item's color.
-Empty slots retain the exact stock gold rim and have no hover card.
+Equipped items retain native rarity colors in their effects-only hover text,
+including poor and common quality. `GetInventoryItemQuality("player", id)`
+supplies the rank; `GetItemQualityColor` or the native `ITEM_QUALITYn_COLOR`
+table supplies RGB. Missing, failed or invalid metadata keeps the existing
+green hover-text fallback while the normal equipment refresh retries. It never
+keeps a removed item's color. Empty slots have no hover card.
 
-The equipped rim uses a neutral copy of the original shaded rim in an unused
-part of the existing atlas, preserving its alpha, dimensions and placement.
-The attached rail and detached silver socket retain their stock colors. Rarity
-and texture reads share the existing five-Hz refresh; only a changed quality
-resolves another native color, and only changed colors or equipped/stock mode
-write tint or UVs. A same-text rarity change updates the pooled hover color
-before its text/measurement cache can return. No region, updater, event,
-setting, runtime file or SavedVariable is added.
+Silver, green, blue, purple and orange gems and halos follow native item
+quality. Poor and common items share silver. Empty slots and unavailable or
+unsupported qualities use the original grey housing. Effects-only hover
+text uses native rarity RGB.
+Both Performance Mode states and layout editing share the static artwork.
+Sources and preparation are recorded in
+[Jewelry-ARTWORK.md](../third_party/Jewelry-ARTWORK.md).
 
 Hover shows only the equipped item's native **Equip**, **Use** and **Chance on hit** effect descriptions. A private `GameTooltipTemplate` under a permanently hidden parent reads `SetInventoryItem("player", id)`; this reader never owns or clears the shared `GameTooltip`, whose visual styling is handled separately by the common hover module. The reader scans at most 64 native rows, skipping the item title and selecting effect rows by the native localized `ITEM_SPELL_TRIGGER_*` prefixes, with English fallback labels only when those globals are missing. The complete matched trigger label and its following whitespace are removed for display, including multiword labels such as Chance on hit. Effect wording, numbers and wrapped text are preserved; no arbitrary first word of a description is removed. Binding, equipment type, requirements, flavor text, sale value and separate cooldown metadata are omitted. No effect values are inferred from the icon or item name. Missing APIs, unavailable descriptions or items without recognized effect rows produce no popup; a hovered slot retries at the existing five-Hz cadence so late native data can appear.
 
@@ -41,23 +57,31 @@ The user excluded both the **Targeting** line and health bar from the native uni
 
 The base client's [item-tooltip renderer](https://github.com/samwhosung/benilla/blob/f55bb79b1343629df2705d9e4207a7612a886253/crates/benilla-ui/src/script/tooltip_item/render.rs#L615-L627) emits these trigger descriptions as distinct wrapped rows. This supports filtering the native description without reimplementing item calculations; it does not establish packaged-game behavior or expose a new jewelry API.
 
-The row has no item-use, equip, pickup, replacement or drag handlers outside shared layout editing. Optional cooldown swipes read only native `GetInventoryItemCooldown` start/duration/enable values and use `GetTime` on the same UI clock. A generated 64-state circular shade atlas visualizes the remaining fraction without putting a square model or dark corner cover around the icon. Missing optional APIs omit those features; they do not invent gameplay timing or disable valid icons.
+The row has no item-use, equip, pickup, replacement or drag handlers outside shared layout editing.
 
-The base client's [inventory readers](https://github.com/samwhosung/benilla/blob/f55bb79b1343629df2705d9e4207a7612a886253/crates/benilla-ui/src/script/char_stats.rs) establish the ordinary equipped-item API and native cooldown clock, separate from the supplied AZS run tables. Source presence does not confirm the exact packaged client's live equipment publication or rendering.
+The base client's [inventory readers](https://github.com/samwhosung/benilla/blob/f55bb79b1343629df2705d9e4207a7612a886253/crates/benilla-ui/src/script/char_stats.rs) establish the ordinary equipped-item API, separate from the supplied AZS run tables. Source presence does not confirm the exact packaged client's live equipment publication or rendering.
 
-Refresh is bounded to five reads per second per slot while in the world, with world-entry refresh and inventory/cooldown events scheduling the next refresh. Polling also allows native template data that arrives after an inventory event to appear. Cosmetic shade painting is bounded to 30 Hz while visible and changes UVs only when the atlas state changes. Missing required APIs or no native player hides the row and clears icons, cooldowns and owned tooltips. World leave/logout clear them immediately and stop reads/painting until world entry. No equipment or cooldown data is saved.
+Refresh is bounded to five reads per second per slot while in the world, with immediate refresh on world entry and inventory changes scheduling the next refresh. Polling also allows native template data that arrives after an inventory event to appear. Missing required APIs or no native player hides the row and clears icons and owned tooltips. World leave/logout clear them immediately and stop reads and painting until world entry. Equipment data stays in memory.
 
 ## Layout and original build
 
-By default, the five circles line up with action buttons **2 through 6**, one above each button. Center spacing matches button width plus its six-unit gap. While attached, the row is parented to the action bar, so its attachment follows the bar's confirmed position, uniform scale, visibility and editing draft. At the 36-unit reference button size, each visible circle is about 29 units wide, its outer socket is 40 units wide, and its center is 20 units above the button tops. The rim crop removes uneven transparent padding while preserving the visible size; each rim shares its icon's center anchor. The socket rail is anchored directly to the action bar, with its centers at the same positions.
+By default, the five circles line up with action buttons **2 through 6**, one above each button. Center spacing matches button width plus its six-unit gap. While attached, the row is parented to the action bar, so its attachment follows the bar's confirmed position, uniform scale, visibility and editing draft. At the 36-unit reference button size, each rendered item is about 28.38 units wide around its unchanged 26.8-unit hover frame, with its center 20 units above the button tops. The 42⅔-unit Runecarver canvas includes its soft halo and shares the icon center. The socket rail is anchored directly to the action bar, with its centers at the same positions.
 
-`SocketRail.blp` combines all five socket arches, feet and straight spans in one continuous upper-edge texture, prepared from the existing `HDActionBar.tga`. It replaces the previous separate caps and gap pieces, which could place the feet and straight edge on different screen rows. The rail uses one bar-owned rectangle and one UV mapping; socket feet have no independent vertical anchors or scale. The original bar texture file is unchanged. Only its 12-unit upper strip switches to the rail; gaps retain the original native pixels and the lower background retains its original UV mapping. The rail uses the native bevel's color, alpha and vertical alignment at the join. Original dark bar material sits inside the border and below the bends; circular openings stay transparent. Transparent cutouts prevent the old straight edge from crossing empty socket openings. No inner/lower quarter-circle line is drawn. When jewelry is unavailable or hidden, the original complete bar background is restored.
+The three `SocketRail` BLP strips retain the original straight upper edge and
+small bottom arch beneath each housing, with the existing transparent item
+cutouts. The lower connector curves underneath the solid Runecarver rim and
+meets the bar smoothly, with no exposed cut ends. It keeps the original native
+bevel and bar join. The old circle is removed from the top and sides.
+They retain their shared bar-owned geometry, UVs and neighbour gutters. The
+original `HDActionBar.tga`, seven buttons and lower background stay unchanged.
+When jewelry is unavailable or hidden, the original complete bar background
+is restored.
 
 The original 317-by-88 internal jewelry frame remains. Attached mode uses **Action bar** for the combined assembly, extending its edit region to include the sockets. Detached mode parents the same icons to a separate UIParent-owned container registered as **Equipped jewelry (detached)**, with its own uniform scale, location and optional hidden flag under the existing `jewelryBar` layout key. This keeps attached and detached geometry separate without moving either registered owner between parents. Confirm, Cancel, Hide frame, discard and full reset use the shared lifecycle. Earlier standalone geometry is reused only when detached; it never moves the attached row. Reattaching retains detached geometry for the next detachment. No migration flag or SavedVariable is added. Existing action-bar geometry, other groups' geometry, native button handlers and equipment-data behavior are preserved. Both layout groups suppress jewelry tooltips while editing.
 
-**Equipped jewelry** in `/sdui` → **HUD** defaults on. Turning it off hides the five icons, rims and socket extensions, restores the original complete action-bar edge and contracts the action-bar editing bounds. Equipment reads and cooldown painting stop while disabled. The toggle previews immediately, saves its normalized `equippedJewelry` boolean in the existing `SurvivorsDragonUiDisplay` table only with Confirm, and rolls back on Cancel, world leave/logout/reload. Both full resets restore on. It does not change native build visibility or action-bar geometry.
+**Equipped jewelry** in `/sdui` → **Jewelry** defaults on. Turning it off hides the five icons and Runecarver housings, restores the original complete action-bar edge and contracts the action-bar editing bounds. Equipment reads stop while disabled. The toggle previews immediately, saves its normalized `equippedJewelry` boolean in the existing `SurvivorsDragonUiDisplay` table only with Confirm, and rolls back on Cancel, world leave/logout/reload. Both full resets restore on. It does not change native build visibility or action-bar geometry.
 
-**Attach jewelry to action bar** defaults on and is dimmed and mouse-disabled while Equipped jewelry is off. It retains its value while disabled. Off replaces the attached rail with five complete silver-gray circular outlines from `SocketDetached.tga` and restores the original action-bar edge. Independent defaults derive from the static bar appearance metadata: the detached circles' bottom sits four units above the default action-art canvas top, without reading moved/scaled bar geometry. Only Confirm saves the normalized `attachJewelry` boolean in the existing display table. Cancel and world leave/logout/reload discard mode and detached-layout drafts; both full resets restore attached mode and default geometry. The native-build visibility choice remains independent.
+**Attach jewelry to action bar** defaults on and is dimmed and mouse-disabled while Equipped jewelry is off. It retains its value while disabled. Off keeps the same Runecarver housings and restores the original action-bar edge, without adding detached silver circles. The five former backing regions and unused `SocketDetached` source/runtime files are removed. Independent defaults retain their original placement derived from static bar appearance metadata, without reading moved/scaled bar geometry. Only Confirm saves the normalized `attachJewelry` boolean in the existing display table. Cancel and world leave/logout/reload discard mode and detached-layout drafts; both full resets restore attached mode and default geometry. The native-build visibility choice remains independent.
 
 The independent **Hide default jewelry / abilities** HUD toggle defaults on. `Native build rows` in `modules/ui/ui.lua` feature-detects the official getter/setter and applies the inverse of the `hideNativeBuild` display boolean on initialization, world entry, display changes and native `hudBuild` changes while in the world. Turning it off explicitly shows both original weapon/jewelry rows. Matching visibility causes no repeated write, and synchronous callbacks are guarded. Confirm alone saves the boolean in the existing display table. Cancel and world leave/logout/reload restore the committed choice; the module discards display drafts before world-exit or native reload saving, independently of event-handler order. Both full resets restore hiding. There is no per-frame polling, prior-visibility snapshot or new SavedVariable. Clock, encounter and tally takeover are unchanged. Hiding the native six-pickup build does not establish a data mapping between those pickups and the five equipped items.
 

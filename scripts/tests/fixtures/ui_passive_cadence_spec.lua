@@ -6,8 +6,10 @@ do
     local context = H.New()
     local env = context.env
     local phase, now = "playing", 100
-    env.DFRL.navigation = { IsRunPhase = function(value) return value == "playing" or value == "paused" end }
-    env.AZS_GetPhase = function() return phase end
+    env.AZS_GetPhase = function()
+        context.reads.phase = (context.reads.phase or 0) + 1
+        return phase
+    end
     env.AZS_GetRunTime = function()
         context.reads.clock = (context.reads.clock or 0) + 1
         return now
@@ -17,18 +19,42 @@ do
         context.reads.guardians = (context.reads.guardians or 0) + 1
         return { { id = 7, hp = 50, hpm = 100 } }
     end
+    context:Load("modules/map/navigation.lua", "Navigation")
     context:Load("modules/ui/guardians.lua", "GuardianRoster")
+    local navigation = env.DFRL.navigation
     local roster = env.DFRL.guardians
-    roster.AcceptLairs({
-        { index = 1, id = 7, state = "awake", name = "Guardian" },
-        { index = 2, id = 0, state = "empty", left = 0 },
-    }, 1, 1)
+    navigation.WithSample(function()
+        assert(navigation.Phase() == "playing")
+        roster.AcceptLairs({
+            { index = 1, id = 7, state = "awake", name = "Guardian" },
+            { index = 2, id = 0, state = "empty", left = 0 },
+        }, 1, 1)
+    end)
+    assert(context.reads.phase == 1, "lair acceptance reread the waypoint sample's native phase")
     context:ResetCounts()
     local snapshot = roster.GetSnapshot()
     assert(not context.reads.clock, "a roster without returning lairs sampled a countdown clock")
     assert(snapshot.rows[1].hp == 50 and snapshot.rows[1].healthFraction == 0.5)
     assert(context.reads.guardians == 1, "living guardians lost native health sampling")
     assert(snapshot.rows[2].status == "due" and snapshot.rows[2].remaining == 0)
+    -- Count the actual production copy traversal, while native health keeps
+    -- changing without a new lair publication or receipt.
+    local nativePairs, copies = env.pairs, 0
+    env.pairs = function(value)
+        if value == snapshot.rows[1] or value == snapshot.rows[2] then copies = copies + 1 end
+        return nativePairs(value)
+    end
+    for _, performance in ipairs({ false, true }) do
+        context.settings.performanceMode = performance
+        env.AZS_GetGuardians = function() return { { id = 7, hp = 40, hpm = 100 } } end
+        snapshot = roster.GetSnapshot(snapshot)
+        assert(snapshot.rows[1].hp == 40 and snapshot.rows[1].healthFraction == 0.4)
+        assert(copies == 0 and snapshot.counts.total == 2 and snapshot.counts.living == 1)
+        env.AZS_GetGuardians = function() return {} end
+        snapshot = roster.GetSnapshot(snapshot)
+        assert(not snapshot.rows[1].hp and not snapshot.rows[1].healthFraction, "missing native health stayed cached")
+    end
+    env.pairs = nativePairs
     roster.AcceptLairs({
         { index = 1, id = 0, state = "empty", left = 20 },
         { index = 2, id = 0, state = "empty", left = 30 },
@@ -50,10 +76,56 @@ do
     now = 100.5
     snapshot = roster.GetSnapshot(snapshot)
     assert(snapshot.rows[1].remaining == 19.5, "missing clock data did not retry on the next snapshot")
+
+    phase = "playing"
+    env.AZS_GetGuardians = function()
+        context.reads.guardians = (context.reads.guardians or 0) + 1
+        return { { id = 7, hp = 65, hpm = 100 } }
+    end
+    local asleep = { index = 1, id = 7, state = "asleep" }
+    local returning = { index = 2, id = 0, state = "empty", left = 10 }
+    roster.AcceptLairs({ asleep, returning }, 3, 3)
+    now = 101.5
+    context:ResetCounts()
+    snapshot = roster.GetSnapshot(snapshot)
+    assert(
+        context.reads.guardians == 1
+            and context.reads.clock == 1
+            and snapshot.rows[1].hp == 65
+            and snapshot.rows[2].remaining == 9,
+        "default roster snapshot lost asleep health or a returning countdown"
+    )
+    context:ResetCounts()
+    snapshot = roster.GetSnapshot(snapshot, false)
+    assert(
+        not context.reads.guardians
+            and not context.reads.clock
+            and not snapshot.rows[1].hp
+            and not snapshot.rows[2].remaining
+            and snapshot.counts.asleep == 1
+            and snapshot.counts.returning == 1,
+        "tracker sampled unused native data or retained old fields in its snapshot"
+    )
+    context:ResetCounts()
+    snapshot = roster.GetSnapshot(snapshot, true)
+    assert(
+        not context.reads.guardians and context.reads.clock == 1 and snapshot.rows[2].remaining == 9,
+        "showing returning rows failed to sample a fresh countdown"
+    )
+    asleep.state = "awake"
+    roster.AcceptLairs({ asleep, returning }, 4, 4)
+    context:ResetCounts()
+    snapshot = roster.GetSnapshot(snapshot, false)
+    assert(
+        context.reads.guardians == 1 and not context.reads.clock and snapshot.rows[1].healthFraction == 0.65,
+        "a fighting guardian did not resume fresh health reads"
+    )
     phase = "ready"
     context:ResetCounts()
     snapshot = roster.GetSnapshot(snapshot)
-    assert(snapshot.status == "inactive" and #snapshot.rows == 0 and not context.reads.clock)
+    assert(
+        snapshot.status == "inactive" and #snapshot.rows == 0 and context.reads.phase == 1 and not context.reads.clock
+    )
 end
 print("PASS guardian roster samples native countdown time only when used and shares missing samples within one pass")
 
@@ -126,6 +198,17 @@ do
             setCrop(self, ...)
             self.crop = { ... }
         end
+        local setPoint = object.SetPoint
+        function object:SetPoint(point, relative, relativePoint, x, y)
+            setPoint(self, point, relative, relativePoint, x, y)
+            self.anchors = self.anchors or {}
+            self.anchors[point] = { relative, relativePoint, x, y }
+        end
+        local setAllPoints = object.SetAllPoints
+        function object:SetAllPoints(relative)
+            setAllPoints(self, relative)
+            self.allPoints = relative
+        end
         function object:RegisterForClicks(value) assert(value == "LeftButtonUp") end
         function object:SetBlendMode(value) assert(value == "ADD") end
         return object
@@ -158,10 +241,39 @@ do
         assert(crop[1] == left and crop[2] == right and crop[3] == top and crop[4] == bottom, "stale class artwork")
         assert(not context.reads.characterClass, "stored levels queried the character-selection class")
     end
+    local pieces, rim = {}, nil
+    local textures, atlasPieces = 0, 0
+    for _, object in ipairs(context.objects) do
+        if object.kind == "Texture" then textures = textures + 1 end
+        if object.texture == "Interface\\AddOns\\SurvivorsDragonUi\\media\\tex\\levelup\\Artisan.blp" then
+            atlasPieces = atlasPieces + 1
+            local crop = object.crop
+            if crop[3] == 0 and crop[4] == 90 / 256 then
+                pieces[crop[1] * 512] = object
+            elseif crop[1] == 272 / 512 then
+                assert(not rim, "stored-level panel allocated a duplicate icon highlight")
+                rim = object
+            else
+                error("stored-level panel prepared retired pulse artwork")
+            end
+        end
+    end
+    assert(pieces[0] and pieces[20] and pieces[106] and pieces[154] and pieces[240], "Artisan panel lost a strip")
+    assert(rim, "Artisan panel lost its silver icon rim")
+    assert(textures == 8 and atlasPieces == 6, "static stored-level panel retained pulse textures")
+    local function ArtisanCaps()
+        assert(pieces[0]:GetWidth() == 16 and pieces[240]:GetWidth() == 16, "translated text stretched the corners")
+        assert(pieces[106]:GetWidth() == 38.4 and pieces[106]:GetHeight() == 72, "translated text stretched the crests")
+        assert(pieces[20].anchors.TOPLEFT[1] == pieces[0] and pieces[20].anchors.TOPLEFT[2] == "TOPRIGHT")
+        assert(pieces[20].anchors.BOTTOMRIGHT[1] == pieces[106] and pieces[20].anchors.BOTTOMRIGHT[2] == "BOTTOMLEFT")
+        assert(pieces[154].anchors.TOPLEFT[1] == pieces[106] and pieces[154].anchors.TOPLEFT[2] == "TOPRIGHT")
+        assert(pieces[154].anchors.BOTTOMRIGHT[1] == pieces[240] and pieces[154].anchors.BOTTOMRIGHT[2] == "BOTTOMLEFT")
+    end
+    ArtisanCaps()
     Crop(0.25, 0.5, 0, 0.25)
     assert(label and button:IsVisible() and context.nativeShown == false)
     assert(context.reads.hud == 2, "initial takeover did not read back the setter")
-    assert(button:GetScript("OnUpdate"), "normal stored-level pulse did not start")
+    assert(not button:GetScript("OnUpdate"), "static stored-level panel installed a cosmetic updater")
     local function OriginalBadge()
         local face, size, flags = label:GetFont()
         local _, _, _, alpha = label:GetShadowColor()
@@ -212,32 +324,57 @@ do
     OriginalBadge()
     display.Reset()
     OriginalBadge()
-    context:SetSetting("performanceMode", true)
-    assert(button:IsVisible() and label:GetText() == "3", "Performance Mode hid the stored-level information")
-    assert(not button:GetScript("OnUpdate"), "Performance Mode retained the stored-level pulse")
-    for _, object in ipairs(context.objects) do
-        if object.kind == "Texture" and (object.texture or ""):find("Glow.blp", 1, true) then
-            assert(not object:IsShown(), "Performance Mode retained the gold halo")
+    local function StaticPanel()
+        assert(button:IsVisible() and label:GetText() == "3", "static stored-level panel lost its native information")
+        assert(not button:GetScript("OnUpdate"), "static stored-level panel installed a cosmetic updater")
+        assert(not button:GetScript("OnEnter") and not button:GetScript("OnLeave"), "retired pulse hover state remains")
+        assert(rim:IsVisible() and rim:GetAlpha() == 1, "static stored-level icon rim changed")
+        for _, piece in pairs(pieces) do
+            assert(piece:IsVisible() and piece:GetAlpha() == 1, "static Artisan panel changed")
         end
     end
-    context:ResetCounts()
-    context:Call(button, "OnUpdate", 0.5)
-    context:NoPresentationWrites()
-    context:SetLayoutHidden(true)
-    context:SetSetting("performanceMode", false)
-    assert(not button:GetScript("OnUpdate"), "hidden mode exit restarted the stored-level pulse")
-    context:SetLayoutHidden(false)
-    assert(button:GetScript("OnUpdate"), "Show did not restore the configured stored-level pulse")
+    for _, performance in ipairs({ false, true }) do
+        context:SetSetting("performanceMode", performance)
+        StaticPanel()
+        context:ResetCounts()
+        context:Call(button, "OnUpdate", 0.5)
+        context:NoPresentationWrites()
+        context:SetLayoutHidden(true)
+        context:SetSetting("performanceMode", not performance)
+        assert(not button:GetScript("OnUpdate"), "hidden mode change installed a cosmetic updater")
+        context:SetLayoutHidden(false)
+        StaticPanel()
+    end
     local function Tick() context:Call(controller, "OnUpdate", 0.1) end
+    local visual = pieces[0]:GetParent():GetParent()
+    local effectiveScale = visual.GetEffectiveScale
+    function visual:GetEffectiveScale()
+        context.reads.scaleSamples = (context.reads.scaleSamples or 0) + 1
+        return effectiveScale(self)
+    end
     context:ResetCounts()
     for _ = 1, 10 do
         Tick()
     end
     assert(context.reads.phase == 10 and context.reads.levels == 10, "native state polling changed")
+    assert(context.reads.scaleSamples == 10, "stored-level captions did not share one scale sample per refresh")
     assert(context.reads.hud == 10 and not context.writes.hud, "settled ownership repeated its readback")
     assert(not context.reads.formats, "unchanged stored-level counts were formatted repeatedly")
     assert(not context.reads.metrics, "unchanged stored-level labels were measured repeatedly")
     assert(not context.writes.SetTexCoord, "unchanged run class repeated its crop write")
+    local nativeTitle, objectCount = title:GetText(), #context.objects
+    for _, caption in ipairs({ "NIVEAU SUPERIEUR", "LEVEL UP" }) do
+        title:SetText(caption)
+        Tick()
+        assert(pieces[0]:GetParent():GetWidth() == 60 + #caption * 7 + 4 + 20, "Artisan panel did not fit the caption")
+        ArtisanCaps()
+        assert(#context.objects == objectCount, "caption changes recreated the Artisan artwork")
+        context:ResetCounts()
+        Tick()
+        context:NoPresentationWrites()
+    end
+    title:SetText(nativeTitle)
+    Tick()
     label.text = "native reset"
     context:ResetCounts()
     Tick()

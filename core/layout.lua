@@ -387,6 +387,7 @@ DFRL:NewMod("Layout", 0, function()
         if options.resize == "dimensions" then
             local width = Number(geometry.width)
                     and Clamp(geometry.width, options.minWidth or 120, options.maxWidth or 2400)
+                or (type(options.defaultWidth) == "function" and options.defaultWidth())
                 or entry.defaultWidth
             local height = Number(geometry.height)
                     and Clamp(geometry.height, options.minHeight or 80, options.maxHeight or 1600)
@@ -804,17 +805,16 @@ DFRL:NewMod("Layout", 0, function()
         then
             return
         end
-        local regionWidth, regionHeight = T.GetLocalSize(start.region)
-        if
-            not force
-            and start.lastCursorX == cursorX
-            and start.lastCursorY == cursorY
-            and start.lastWidth == entry.frame:GetWidth()
-            and start.lastHeight == entry.frame:GetHeight()
-            and T.NearlyEqual(start.lastRegionWidth, regionWidth)
-            and T.NearlyEqual(start.lastRegionHeight, regionHeight)
-        then
-            return
+        if not force and start.lastCursorX == cursorX and start.lastCursorY == cursorY then
+            local regionWidth, regionHeight = T.GetLocalSize(start.region)
+            if
+                start.lastWidth == entry.frame:GetWidth()
+                and start.lastHeight == entry.frame:GetHeight()
+                and T.NearlyEqual(start.lastRegionWidth, regionWidth)
+                and T.NearlyEqual(start.lastRegionHeight, regionHeight)
+            then
+                return
+            end
         end
         if entry.options.refreshRegion then entry.options.refreshRegion() end
         local right = string.find(start.corner, "RIGHT") ~= nil
@@ -2025,6 +2025,19 @@ DFRL:NewMod("Layout", 0, function()
         if not width then return end
         local sampleElapsed = viewportAge
         viewportAge = 0
+        -- Keep the same native sample and recovery latency. An unchanged
+        -- gameplay viewport needs no editor/restoration work or comparisons.
+        if
+            not enabled
+            and not activeDrag
+            and not needsRestore
+            and not needsDefaultPosition
+            and width == lastWidth
+            and height == lastHeight
+            and scale == lastScale
+        then
+            return
+        end
         if
             not lastWidth
             or not T.NearlyEqual(width, lastWidth)

@@ -335,7 +335,7 @@ The user requested hiding the original weapon and jewelry rows again after the c
 
 The `Native build rows` initializer in `modules/ui/ui.lua` feature-detects the official getter/setter. The user-requested **Hide default jewelry / abilities** HUD toggle defaults on; it applies `AZS_SetHudShown("build", not hideNativeBuild)` on initialization, world entry, display changes and changes to `hudBuild` while in the world. Matching visibility causes no repeated write, and a guard prevents synchronous CVar callbacks from reentering. Confirm alone saves `hideNativeBuild` in the existing display table. Cancel, world leave/logout/reload restore the committed choice; display drafts are discarded before native reload or world-exit saving, independently of layout-event order. Both full resets restore hiding. It adds no per-frame polling, SavedVariable or prior-visibility snapshot and leaves the existing clock/boss/tally takeover and restoration paths intact. Packaged-game behavior remains unverified; no local checks or game/addon execution were run.
 
-The user explicitly chose five ordinary equipped jewelry slots: neck, two rings and two trinkets. The selected design-4 thin-bezel attachment joins those sockets to the existing action bar, with the extra lower curved line omitted and the original bar texture retained. Jewelry shares the action bar's geometry and editing lifecycle while attached. The Attach jewelry to action bar HUD toggle defaults on and is available while equipped jewelry is enabled; off retains complete silver-gray circular outlines and uses independent `jewelryBar` layout geometry through a separate container. Only Confirm saves `attachJewelry` in the existing display table; discard and both full resets use the shared lifecycle. Its independent **Equipped jewelry** HUD toggle defaults on; off restores the original bar edge and stops equipment/cooldown work. Only Confirm saves `equippedJewelry` in the existing display table; shared discard and both full resets retain the usual lifecycle. Equipment data uses stock inventory APIs and native cooldowns. A private hidden inventory tooltip supplies only localized Equip/Use/Chance-on-hit rows for the effects-only card without owning or clearing the shared tooltip; missing descriptions show no popup. The common hover module separately styles native unit/ability tooltips and the jewelry card using the selected PentSec/DragonUI approach, without a Targeting line or hover health bar; see [TOOLTIPS.md](TOOLTIPS.md). It does not substitute equipped items for the native six-pickup build or invent an AZS jewelry feed. See [EQUIPPED-JEWELRY.md](EQUIPPED-JEWELRY.md) for sources, refresh/cleanup and layout behavior.
+The user explicitly chose five ordinary equipped jewelry slots: neck, two rings and two trinkets. The selected design-4 thin-bezel attachment joins those sockets to the existing action bar, with the extra lower curved line omitted and the original bar texture retained. Jewelry shares the action bar's geometry and editing lifecycle while attached. The Attach jewelry to action bar HUD toggle defaults on and is available while equipped jewelry is enabled; off retains complete silver-gray circular outlines and uses independent `jewelryBar` layout geometry through a separate container. Only Confirm saves `attachJewelry` in the existing display table; discard and both full resets use the shared lifecycle. Its independent **Equipped jewelry** HUD toggle defaults on; off restores the original bar edge and stops equipment reads. Only Confirm saves `equippedJewelry` in the existing display table; shared discard and both full resets retain the usual lifecycle. Equipment data uses stock inventory APIs. A private hidden inventory tooltip supplies only localized Equip/Use/Chance-on-hit rows for the effects-only card without owning or clearing the shared tooltip; missing descriptions show no popup. The common hover module separately styles native unit/ability tooltips and the jewelry card using the selected PentSec/DragonUI approach, without a Targeting line or hover health bar; see [TOOLTIPS.md](TOOLTIPS.md). It does not substitute equipped items for the native six-pickup build or invent an AZS jewelry feed. See [EQUIPPED-JEWELRY.md](EQUIPPED-JEWELRY.md) for sources, refresh/cleanup and layout behavior.
 
 ## Independent clock and marker recovery after reload — 2026-10-15
 
@@ -590,32 +590,36 @@ updater, SavedVariable or client change is added. Verification was source/diff
 review and pinned formatting only; local tests, standalone validation and
 addon/game execution were not run.
 
-## Nameplate right-button camera turning — 2026-10-31
+## Nameplate right-button camera turning — updated 2026-11-03
 
-A right-button press on a visible enemy plate now starts native mouse-look,
-which uses the client's right-turn channel. Left-click targeting and existing
-mouse handlers stay native. The addon does not change native mouse-enabled
-flags, hit rectangles, click registrations, V or the boss/guardian filter.
-Masked and hidden plates cannot start the gesture. This works independently of
-the selected SCT mode/style and uses the same input path in Performance Mode.
+A right-button press on a visible enemy plate starts native mouse-look only
+when the client also exposes a usable `IsMouseButtonDown("RightButton")` read.
+Clients without that read keep native nameplate input. Left-click targeting,
+existing handlers, mouse flags, hit rectangles, click registration, V and the
+boss/guardian filter stay native. Both Performance Mode states and all SCT
+modes/styles share this input behavior.
 
 The reference client's [movement calls](https://github.com/Arnesen/wenilla/blob/ea514d8bb724c0571fc74183f23de7b1bbb303cf/crates/benilla-ui/src/script/input_verbs.rs#L510)
 allow `MouselookStart`/`MouselookStop` from addon handlers; `TurnOrActionStart`
 has a separate movement gate. Native [camera entry](https://github.com/Arnesen/wenilla/blob/ea514d8bb724c0571fc74183f23de7b1bbb303cf/crates/benilla-ui/src/script/pointer.rs#L309)
 sends a synthetic mouse-up to the plate and releases its capture. The addon
 ignores that entry-time release and ends its own hold on the later real
-right-button release through WorldFrame, with a plate mouse-up fallback. Plate
-death, hiding and reuse do not end a held camera gesture. Native left-click
-selection remains available; right-button presses prioritize camera control.
+right-button release through WorldFrame, with a plate mouse-up fallback.
+[Issue #96](https://github.com/migwynkriid13/SurvivorsDragonUi/issues/96) reports
+the cursor staying hidden when neither hook stops the look. The reference
+[input dispatcher](https://github.com/samwhosung/benilla/blob/e2aeaecffcfcaea27f762f61901ec4046587b843/crates/benilla-app/src/ui_script/input.rs#L351-L397)
+has a path that bypasses both Lua mouse-up hooks when the release has no
+cursor point. The installed executable has the mouse-look symbols but no
+`IsMouseButtonDown` symbol, so the addon uses native plate input there unless
+the client supplies that getter separately.
 
-Only an addon-started hold is stopped. Pre-existing mouse-look is left alone,
-and a later external start takes ownership. Real release, WorldFrame hiding,
-world leave, logout and reload clear the owned hold. Missing camera APIs leave
-native interaction unchanged. Hooks are installed once on discovered plates
-and the existing WorldFrame, with no idle polling, new controller or saved data.
-CI-only mocks cover native entry/release ordering and cleanup. Source inspection
-does not establish input delivery in the packaged game; no local tests or
-addon/game execution were performed.
+The existing controller checks the physical button only during an addon-owned
+hold. If the release was missed or the read fails, it stops that hold without
+sending a click. Plate death, hiding and reuse do not end a held gesture.
+WorldFrame hiding, world leave, logout and reload still clear owned holds.
+Pre-existing and later external mouse-look keep their ownership. CI-only mocks
+cover the missed release, long hold and native fallback. Packaged input delivery
+was not tested in game.
 
 ## First-allocation nameplate flash — 2026-10-15
 

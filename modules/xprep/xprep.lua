@@ -21,25 +21,35 @@ DFRL:NewMod("Xprep", 1, function()
     local bar = CreateFrame("StatusBar", "DFRL_XPBar", hud)
     bar:SetHeight(defaults.height)
     bar:SetFrameStrata("LOW")
-    bar:SetStatusBarTexture(fillTexture)
-    bar:SetStatusBarColor(0.85, 0.4, 0.85)
     bar:SetMinMaxValues(0, 1)
     bar:EnableMouse(false)
     bar:Hide()
+    local fill = T.NewClippedFill(bar)
+    fill.SetTexture(fillTexture)
+    fill.SetColor(0.85, 0.4, 0.85)
+    local function SetProgress(value)
+        bar:SetValue(value)
+        fill.SetFraction(value)
+    end
 
     local background = bar:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(bar)
     background:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
     background:SetVertexColor(0.1, 0.1, 0.1, 0.8)
 
-    -- Border halves stay inside the same horizontal bounds as the bar.
-    local leftBorder = bar:CreateTexture(nil, "OVERLAY")
+    -- The fill and gain effects each paint through a scroll callback. Keep
+    -- the border and caption above both, within the same horizontal bounds.
+    local overlay = CreateFrame("Frame", nil, bar)
+    overlay:SetAllPoints(bar)
+    overlay:SetFrameLevel(bar:GetFrameLevel() + 2)
+    overlay:EnableMouse(false)
+    local leftBorder = overlay:CreateTexture(nil, "OVERLAY")
     leftBorder:SetTexture(texpath .. "border_half.blp")
     leftBorder:SetPoint("LEFT", bar, "LEFT", 0, 0)
     leftBorder:SetPoint("RIGHT", bar, "CENTER", 0, 0)
     leftBorder:SetHeight(defaults.borderHeight)
 
-    local rightBorder = bar:CreateTexture(nil, "OVERLAY")
+    local rightBorder = overlay:CreateTexture(nil, "OVERLAY")
     rightBorder:SetTexture(texpath .. "border_half.blp")
     rightBorder:SetPoint("LEFT", bar, "CENTER", 0, 0)
     rightBorder:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
@@ -48,18 +58,35 @@ DFRL:NewMod("Xprep", 1, function()
 
     -- Two passive regions reuse the fill and the native spark already used by
     -- the run timer. Both stay below the original metal border.
-    local gain = bar:CreateTexture(nil, "ARTWORK")
-    gain:SetTexture(fillTexture)
-    gain:SetBlendMode("ADD")
-    gain:SetVertexColor(0.9, 0.55, 1)
-    gain:SetHeight(defaults.height)
-    gain:Hide()
-    local spark = bar:CreateTexture(nil, "ARTWORK")
-    spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
-    spark:SetBlendMode("ADD")
-    spark:SetVertexColor(1, 0.75, 1)
-    spark:SetHeight(defaults.height + 4)
-    spark:Hide()
+    local gain, spark, sparkClip, sparkCanvas
+    local function PrepareEffects()
+        if sparkClip then return end
+        local sparkHeight = defaults.height + 4
+        sparkClip = CreateFrame("ScrollFrame", nil, bar)
+        sparkClip:SetFrameLevel(bar:GetFrameLevel() + 1)
+        sparkClip:SetPoint("LEFT", bar, "LEFT", 0, 0)
+        sparkClip:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
+        sparkClip:SetHeight(sparkHeight)
+        sparkClip:EnableMouse(false)
+        sparkClip:Hide()
+        sparkCanvas = CreateFrame("Frame", nil, sparkClip)
+        sparkCanvas:SetWidth(1)
+        sparkCanvas:SetHeight(1)
+        sparkCanvas:EnableMouse(false)
+        sparkClip:SetScrollChild(sparkCanvas)
+        gain = sparkCanvas:CreateTexture(nil, "ARTWORK")
+        gain:SetTexture(fillTexture)
+        gain:SetBlendMode("ADD")
+        gain:SetVertexColor(0.9, 0.55, 1)
+        gain:SetHeight(defaults.height)
+        gain:Hide()
+        spark = sparkCanvas:CreateTexture(nil, "ARTWORK")
+        spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+        spark:SetBlendMode("ADD")
+        spark:SetVertexColor(1, 0.75, 1)
+        spark:SetWidth(12)
+        spark:SetHeight(sparkHeight)
+    end
 
     local attached, registered, editing = false, false, false
     local docked
@@ -131,7 +158,13 @@ DFRL:NewMod("Xprep", 1, function()
     local xpText
     local events = CreateFrame("Frame")
     local OnUpdate
+    local updating = false
 
+    local function SetUpdates(active)
+        if updating == active then return end
+        events:SetScript("OnUpdate", active and OnUpdate or nil)
+        updating = active
+    end
     local function Number(value) return type(value) == "number" and value - value == 0 and value >= 0 end
 
     local function UpdateXPText()
@@ -148,7 +181,7 @@ DFRL:NewMod("Xprep", 1, function()
             return
         end
         if not xpText then
-            xpText = bar:CreateFontString(nil, "OVERLAY")
+            xpText = overlay:CreateFontString(nil, "OVERLAY")
             xpText:SetPoint("LEFT", bar, "LEFT", 4, 0)
             xpText:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
             xpText:SetHeight(12)
@@ -170,10 +203,10 @@ DFRL:NewMod("Xprep", 1, function()
         origin, destination, gainStart, age, duration, fadeAge = nil, nil, nil, nil, nil, nil
         wrapping = false
         displayed = desired
-        if bar:IsVisible() and bar:GetValue() ~= displayed then bar:SetValue(displayed) end
-        if gain:IsShown() then gain:Hide() end
-        if spark:IsShown() then spark:Hide() end
-        if not pending then events:SetScript("OnUpdate", nil) end
+        if bar:IsVisible() and bar:GetValue() ~= displayed then SetProgress(displayed) end
+        if gain and gain:IsShown() then gain:Hide() end
+        if sparkClip and sparkClip:IsShown() then sparkClip:Hide() end
+        if not pending then SetUpdates(false) end
     end
 
     local requestedShown, requestedDocked
@@ -209,7 +242,14 @@ DFRL:NewMod("Xprep", 1, function()
         hud:SetParent(owner)
         hud:SetScale(1)
         hud:SetFrameLevel(owner:GetFrameLevel() + 2)
-        bar:SetFrameLevel(hud:GetFrameLevel() + 1)
+        local barLevel = hud:GetFrameLevel() + 1
+        bar:SetFrameLevel(barLevel)
+        fill.BindViewport()
+        if sparkClip then
+            sparkClip:SetScrollChild(sparkCanvas)
+            sparkClip:SetFrameLevel(barLevel + 1)
+        end
+        overlay:SetFrameLevel(barLevel + 2)
         hud:ClearAllPoints()
         bar:ClearAllPoints()
         if joined then
@@ -225,11 +265,12 @@ DFRL:NewMod("Xprep", 1, function()
             leftBorder:Show()
             rightBorder:Show()
         end
+        fill.RefreshWidth()
         return true
     end
 
     local function PaintGlow(alpha)
-        local width = T.GetLocalSize(bar)
+        local width = T.GetLocalWidth(bar)
         local left, right = (gainStart or displayed) * width, displayed * width
         if right > left and alpha > 0 then
             if gain.drawnLeft ~= left then
@@ -248,39 +289,31 @@ DFRL:NewMod("Xprep", 1, function()
         else
             if gain:IsShown() then gain:Hide() end
         end
-        -- Crop the moving spark at the bar's ends instead of leaking past them.
-        local sparkLeft, sparkRight = math.max(0, right - 6), math.min(width, right + 6)
-        if sparkRight > sparkLeft and displayed > 0 and alpha > 0 then
+        -- The viewport clips the ends without changing the spark's source UVs.
+        if width > 0 and displayed > 0 and alpha > 0 then
+            local sparkLeft = right - 6
             if spark.drawnLeft ~= sparkLeft then
                 spark:SetPoint("LEFT", bar, "LEFT", sparkLeft, 0)
                 spark.drawnLeft = sparkLeft
-            end
-            if spark.drawnWidth ~= sparkRight - sparkLeft then
-                spark:SetWidth(sparkRight - sparkLeft)
-                spark.drawnWidth = sparkRight - sparkLeft
-            end
-            local firstU, lastU = (sparkLeft - right + 6) / 12, (sparkRight - right + 6) / 12
-            if spark.firstU ~= firstU or spark.lastU ~= lastU then
-                spark:SetTexCoord(firstU, lastU, 0, 1)
-                spark.firstU, spark.lastU = firstU, lastU
             end
             if spark.drawnAlpha ~= alpha then
                 spark:SetAlpha(alpha)
                 spark.drawnAlpha = alpha
             end
-            if not spark:IsShown() then spark:Show() end
+            if not sparkClip:IsShown() then sparkClip:Show() end
         else
-            if spark:IsShown() then spark:Hide() end
+            if sparkClip:IsShown() then sparkClip:Hide() end
         end
     end
 
     local function BeginGain(value)
+        PrepareEffects()
         origin, destination, age, fadeAge = displayed, value, 0, nil
         gainStart = gainStart or displayed
         -- Use retail's distance-based pacing, bounded for this much shorter bar.
-        local width = T.GetLocalSize(bar)
+        local width = T.GetLocalWidth(bar)
         duration = math.max(0.18, math.min(0.45, (value - displayed) * width * 0.008))
-        events:SetScript("OnUpdate", OnUpdate)
+        SetUpdates(true)
     end
 
     local function UpdateXP(animate)
@@ -337,7 +370,7 @@ DFRL:NewMod("Xprep", 1, function()
             UpdateXP(animate)
         end
         if not destination then
-            if not pending then events:SetScript("OnUpdate", nil) end
+            if not pending then SetUpdates(false) end
             return
         end
         if not bar:IsVisible() then
@@ -357,15 +390,15 @@ DFRL:NewMod("Xprep", 1, function()
         local progress = math.min(age / duration, 1)
         local eased = 1 - (1 - progress) * (1 - progress) * (1 - progress)
         displayed = origin + (destination - origin) * eased
-        bar:SetValue(displayed)
+        SetProgress(displayed)
         PaintGlow(math.min(1, age / 0.08))
         if progress < 1 then return end
         if wrapping then
             wrapping = false
             displayed, gainStart = 0, nil
-            bar:SetValue(0)
+            SetProgress(0)
             gain:Hide()
-            spark:Hide()
+            sparkClip:Hide()
             if desired > 0 then
                 BeginGain(desired)
             else
@@ -377,10 +410,11 @@ DFRL:NewMod("Xprep", 1, function()
     end
 
     bar:SetScript("OnHide", StopAnimation)
+    bar:SetScript("OnSizeChanged", function() fill.RefreshWidth() end)
     bar:SetScript("OnShow", function()
-        bar:SetValue(desired)
+        SetProgress(desired)
         pending, instant = true, true
-        events:SetScript("OnUpdate", OnUpdate)
+        SetUpdates(true)
     end)
 
     function DFRL.AttachXPBar(mainBar)
@@ -458,7 +492,7 @@ DFRL:NewMod("Xprep", 1, function()
             end
             if inWorld and customActionBar then
                 pending = true
-                events:SetScript("OnUpdate", OnUpdate)
+                SetUpdates(true)
             end
         end
     end)

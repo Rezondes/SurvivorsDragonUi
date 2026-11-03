@@ -233,8 +233,11 @@ its original TGA and the separate native-pet `Health.blp` remain intact.
 
 Portrait previews defer while hidden and apply through the existing Show/value
 callbacks. Unchanged previews and refreshes skip geometry writes and reuse the
-same artwork. Normal mode retains the original loss fade; Performance Mode
-keeps health instant and clears the trail without replay. CI-only production
+same artwork. Each player, target and target-of-target loss overlay prepares
+its one frame and texture only at the first enabled, visible, valid-health
+baseline outside Performance Mode, then remains pooled. Disabled or hidden
+bars do not prepare them. Normal mode retains the original loss fade;
+Performance Mode keeps health instant and clears the trail without replay. CI-only production
 mocks cover caption bounds, fixed label positions, border reuse, hidden recovery,
 native dead/health changes and trail transitions. Local tests and game execution
 were not run; the supplied screenshots establish the reported defect, not the
@@ -266,7 +269,16 @@ Player, Target and Party frames have left/right side handles in Layout. Dragging
 
 Player and target use compact edit regions around their visible border art and enabled name/level captions, rather than the native roots' transparent canvas. Width grips sit at the middle of that outline's left/right borders. The shared helper reads prepared nonzero-alpha bounds for the pointed, round, boss, elite and rare sheets as static metadata; classification and portrait-mode changes select the appropriate bounds. Hidden portraits use the existing closed-border frame plus the enabled caption height. The native root, input, saved position/scale and independent health-width value stay unchanged. Corner scaling and Shift alignment measure this same compact region. Target bounds also include its currently shown native aura buttons through the existing tooltip-owned aura registry, so the border does not cross visible icons. Aura measurements run only while editing. Auras and attached pets retain their native attachment and input.
 
-The shared Layout root stores `width` beside its position/scale. Let `delta` be the chosen root width minus its original native width. Player and target content becomes `122 + delta`, with portrait overlap and one-unit render underlap added separately. The player retains its 15-unit round or two-unit pointed overlap. The target uses seven units: its right fill/background edge moves eight UI units left from the former 15-unit overlap, toward the inside edge of the gold ring. Its far-left edge, health text positions, portrait and border stay fixed. This reduces the hidden portion of the health fill without claiming to remove the circular ring's entire overlap. Source columns 0–33 keep the outer cap's native size while columns 33–152 extend the straight horizontal artwork. The portraits and their original rim crops retain their sizes. The target still follows its rim even when its native anchor was expressed from the root center or left side. The player's status pulse and resting animation stay with its fixed portrait area rather than shifting to the widened root center.
+The shared Layout root stores `width` beside its position/scale. Let `delta` be the chosen root width minus its original native width. Player and target content becomes `122 + delta`, with portrait overlap and one-unit render underlap added separately. The player retains its 15-unit round or two-unit pointed overlap. The target uses seven units: its right fill/background edge moves eight UI units left from the former 15-unit overlap, toward the inside edge of the gold ring. Its far-left edge, health text positions, portrait and border stay fixed. This reduces the hidden portion of the health fill without claiming to remove the circular ring's entire overlap. Source columns 0–33 keep the outer cap's native size while columns 33–152 extend the straight horizontal artwork. The portraits and their original rim crops retain their sizes. The target still follows its rim even when its native anchor was expressed from the root center or left side. The player's static resting icon stays with its fixed portrait area rather than shifting to the widened root center.
+
+The pointed player rim ends at local x102.5, while the original top/bottom
+straight strips began at x104. Those two strips now include source columns
+152–153.5 to meet the rim, closing the gap beside the name panel and lower
+shadow. Switching to the round rim restores their original crop. The existing
+width-piece records retain the corrected crop and anchor through resizing;
+health/resource openings, captions and portrait geometry stay unchanged. This
+reuses the same regions and texture-change path, with no new asset or updater.
+Native filtering and in-game appearance remain unverified.
 
 **Hide portraits** continues to remove only the existing overlap and display the shared closed border attached to the actual health rectangle. It does not reset the chosen width. Pointed and round player rims, native 2D/optional 3D portraits, health values/percentages, names, levels and damage-loss fractions keep their existing owners. A shown resource strip follows the health span at its original height. No target-of-target or pet-frame width control is added.
 
@@ -277,7 +289,14 @@ Player/target limits leave at least 64 units of original health content; party l
 ## Artwork
 
 **3D Portrait** enables the existing independent player, target and
-target-of-target models. Their native rectangular viewports are centered inside
+target-of-target models. Each model and its backing strips are created only on
+its first eligible use: 3D enabled, Performance Mode off, portraits visible,
+in-world, with a visible owner and an existing unit. Default 2D creates no model,
+backing texture or player foreground holder. The existing owner Show and native
+events recover initially hidden or absent targets without another updater.
+Turning 3D off clears and hides prepared models; later enabling reuses them.
+
+Their native rectangular viewports are centered inside
 the existing portrait circles. For portrait diameter `d`, each viewport is
 `(d - 2) / sqrt(2)` units square, keeping all four corners inside the ring.
 The 3D view is therefore smaller than the original full-width model viewport;
@@ -293,6 +312,10 @@ portrait dimensions and skips unchanged geometry; no updater is added.
 Still portraits remain the fallback until the existing model callback provides
 copy and viewport evidence. The legacy `playerPortrait3D` preference and all
 preview, Confirm, Cancel, reset and world/reload cleanup paths are retained.
+Unsupported native preparation keeps the original still and does not repeatedly
+allocate replacement models. CI-only cases cover deferred creation, model/strip
+counts, settings transactions, late callbacks, target changes, existing border
+levels, native failures and world/reload cleanup; no local tests or game execution.
 
 The shared `CreatePortraitlessBorder` helper closes both ends with mirrored
 pieces of the existing `UI-TargetingFrameDF1.blp` straight metal edge. Source
@@ -306,8 +329,40 @@ asset is shipped.
 
 The ordinary portrait sheets are hidden while this border is active. The small
 target-of-target hides only its sheet strips, retaining its foreground health
-and dead text. Player portrait pulses and the resting icon remain hidden while
-portraits are off. Native primary pet and summon frames are unaffected.
+and dead text. The resting icon remains hidden while portraits are off. Native primary pet and summon frames are unaffected.
+
+The resting icon uses the compact `Resting.blp` image in both Performance
+Mode states. The original 60-by-60 static tile and neighbouring filter pixels
+occupy a 64-by-64 canvas, sampled at `0..60/64` on both axes without resampling.
+Its original position and size remain; the existing native resting
+event and display listener only change visibility. No animation clock, frame
+index or OnUpdate is retained. Parent hiding and Hide portraits still hide it.
+
+Combat/rest portrait pulse effects are removed in both modes. The original
+static round/pointed borders remain, with health, power, absorbs, native clicks
+and saved layout retaining their existing paths. Removing the two cosmetic
+owners and their round variants removes four frames and eight texture regions.
+The unused `UI-Player-Status.blp` is removed from the tree and runtime manifest;
+the shared static-border sheets remain in use.
+
+The former 512-by-512 `UIUnitFrameRestingFlipbook.blp` and its full-size TGA
+authoring copy are removed. `Resting.tga` retains only the same 64-by-64 source
+crop for the existing client-texture preparation pipeline. The runtime BLP
+shrinks from 1,049,748 to 9,364 bytes (about 99.1%) through the existing lossless
+palette writer, with no added frame, texture region, event or updater. Blizzard
+artwork ownership and the existing credits are unchanged.
+
+The retired runtime source is available in Git at `064023f` under its former
+path, with SHA-256
+`6d653f2d51fbc02bf2af47078e9af4a01855970446acaafd9aa58c1a0ec7d795`.
+Its top-left `(0,0)-(64,64)` crop supplies the new authoring image; CI pins the
+decoded BGRA hash of both that canvas and the visible 60-by-60 tile. Native
+pixels, alpha and filter neighbours remain unchanged.
+
+CI-only player-status and artwork cases cover the compact fixed image, native visibility events,
+mode and portrait choices, parent hiding, reuse and absence of animation work.
+They were authored without local tests or addon/game execution; native
+appearance and FPS remain unverified.
 
 ## Verification
 

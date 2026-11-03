@@ -44,14 +44,21 @@ continue at frame cadence. Completed fade-in stops rewriting full opacity;
 the fill, spark and visibility setters likewise skip unchanged values. Clearing
 and new subjects retain the original fade and percentage-step behavior.
 
+The existing Layout root, fill, border and labels remain ready. The spark and
+twelve cross rectangles prepare only on the first visible normal-mode
+presentation, then remain pooled. Idle, hidden and Performance Mode views do
+not create those decorations. First use and mode exit use the current native
+progress without changing the reader, smoothing or animation timing.
+
 The view caches only the latest subject/direction, language and translated
 caption, plus the latest displayed percentage string. New native progress still
 updates normally, but unchanged text skips formatting. Hidden views defer
 caption formatting until visible. Actual label comparisons retain failed-write
 retries and repair external text changes. Clear invalidates these display
-caches. Each animation pass samples the current root width once for its dirty
-fill/spark paint and six cross positions; standalone paints still read current
-width. No effect, clipping equation, smoothing step or update cadence changes.
+caches. Animation reuses the root width for its fill, spark and six cross
+positions. Show, a size change or an unavailable width triggers a fresh sample.
+Standalone paints still read current width. The clipping equations, smoothing
+steps and frame cadence stay the same.
 
 The installed 0.115.0 native Lua defines `AZS_GetRevive()` as a direct return of
 `AZS_REVIVE`. Its documented fields are `down`, `share`, `by`, `reviving` and
@@ -72,6 +79,14 @@ snapshots remain valid regardless of timestamp age. World leave, logout,
 reload and `AZSZONE` retire the visible state and block the old packet identity,
 stamp and delivery generation until a fresh delivery. World entry resumes
 refreshing. Both resets clear the view and allow current valid state to repaint.
+
+Both Performance Mode states also reuse explicitly valid idle publications:
+the documented empty out-of-party result, or `down == 0` with `reviving == ""`.
+The same packet/stamp/receipt tuple skips repeated getter calls until it changes
+or existing reset/visibility/settings/world invalidation requests a fresh read.
+Phase checks and native HUD release retries stay at ten Hz. Missing, malformed
+or failed native results remain retryable; fresh receipts still activate the
+bar on the next frame, including reused tables and timestamps.
 
 ## Layout and native replacement
 

@@ -11,25 +11,44 @@ DFRL:NewMod("Chat", 1, function()
         if initialized or not ChatFrame1 then return end
         initialized = true
 
-        local WIDTH, HEIGHT = 520, 340
+        local DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH = 400, 220, 240
+        local LEFT, BOTTOM, BAR_GAP = 20, 40, 12
+        local STRATA = "LOW"
         local FOOTER_HEIGHT = 32
         local HOLD, FADE, SLIDE = 14, 0.6, 0.35
         local states, selected = {}, nil
+        local activeStates = {}
         local input = _G.ChatFrameEditBox or _G.ChatFrame1EditBox or ChatFrame1.editBox
         local RefreshFrames, SelectChat, PositionInput, UpdateIndicator
         local focused = false
         local performanceMode = DFRL.display.Get("performanceMode")
 
+        local function DefaultGeometry()
+            local bar = DFRL.actionBarDefaults
+            if not bar then return DEFAULT_WIDTH, BOTTOM end
+            local screenWidth = T.GetLocalSize(UIParent)
+            if not screenWidth or screenWidth <= 0 then return DEFAULT_WIDTH, BOTTOM end
+            local available = (screenWidth - bar.width) / 2 - bar.sideInset - LEFT - BAR_GAP
+            if available >= MIN_WIDTH then return math.min(DEFAULT_WIDTH, available), BOTTOM end
+            -- Leave room for both the action bar's jewelry and the chat footer.
+            return MIN_WIDTH, bar.bottom + bar.height + bar.jewelryTopInset + FOOTER_HEIGHT + BAR_GAP
+        end
+        local function AnchorDefault(frame)
+            local _, bottom = DefaultGeometry()
+            frame:ClearAllPoints()
+            frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", LEFT, bottom)
+        end
+
+        local rootWidth, rootHeight = DefaultGeometry(), DEFAULT_HEIGHT
         local root = CreateFrame("Frame", "SurvivorsDragonUiChat", UIParent)
-        root:SetWidth(WIDTH)
-        root:SetHeight(HEIGHT)
-        -- Leave only enough bottom clearance for the input and scroll indicator.
-        root:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 20, 40)
-        root:SetFrameStrata("LOW")
+        root:SetWidth(rootWidth)
+        root:SetHeight(rootHeight)
+        AnchorDefault(root)
+        root:SetFrameStrata(STRATA)
+        root:SetFrameLevel(1)
         root:SetAlpha(1)
         root:Show()
         chat.frame = root
-        local rootWidth, rootHeight = WIDTH, HEIGHT
         -- Include the native input and passive indicator below the message pane.
         local moveRegion = CreateFrame("Frame", nil, root)
         moveRegion:SetPoint("TOPLEFT", root, "TOPLEFT", -1, 0)
@@ -44,10 +63,10 @@ DFRL:NewMod("Chat", 1, function()
             end
             return false
         end
-        local function Label(parent, text, size)
+        local function Label(parent, text)
             local label = parent:CreateFontString(nil, "OVERLAY")
             DFRL.locale.Bind(label)
-            T.SetFont(label, size or 12, "OUTLINE")
+            T.SetFont(label, 12, "OUTLINE")
             T.SetChatShadow(label)
             label:SetText(text or "")
             return label
@@ -171,6 +190,7 @@ DFRL:NewMod("Chat", 1, function()
                 local lastVisible = math.max(state.lastActivity or 0, state.lastReveal or 0)
                 if not performanceMode and now - lastVisible >= HOLD + FADE then
                     state.revealStart, state.visualAlpha = now, 0
+                    activeStates[state] = true
                 end
                 state.lastReveal = now
                 Rearm(state)
@@ -187,6 +207,9 @@ DFRL:NewMod("Chat", 1, function()
             -- them at the existing refresh points, outside the slide hot path.
             if refresh then
                 LockNativeMovement(frame)
+                -- Saved native chat levels can put the pane over SDUI's action buttons.
+                local level = root:GetFrameLevel() + 1
+                if frame:GetFrameLevel() ~= level then frame:SetFrameLevel(level) end
                 state.anchored = HasAnchor(frame, "TOPLEFT", root, "TOPLEFT", 3, y)
                 state.positionY = state.anchored and y or nil
                 state.width, state.height = frame:GetWidth(), frame:GetHeight()
@@ -216,7 +239,7 @@ DFRL:NewMod("Chat", 1, function()
         end
 
         local indicator = CreateFrame("Frame", nil, root)
-        indicator:SetWidth(WIDTH)
+        indicator:SetWidth(rootWidth)
         indicator:SetHeight(FOOTER_HEIGHT)
         indicator:SetPoint("TOPLEFT", root, "BOTTOMLEFT", 0, 0)
         indicator:SetFrameLevel(root:GetFrameLevel() + 5)
@@ -228,10 +251,16 @@ DFRL:NewMod("Chat", 1, function()
         local indicatorMessage = "Scroll down for latest messages"
 
         UpdateIndicator = function(atBottom)
-            if not root:IsVisible() then return end
-            if atBottom == nil and selected then atBottom = AtBottom(selected) end
+            local visible
+            if atBottom == nil then
+                if not root:IsVisible() then return end
+                visible = true
+                if selected then atBottom = AtBottom(selected) end
+            end
             if selected and not atBottom and not focused then
                 local message = selected.unread and "Unread messages" or "Scroll down for latest messages"
+                if indicatorShown and indicatorMessage == message then return end
+                if not visible and not root:IsVisible() then return end
                 if indicatorMessage ~= message then
                     indicatorText:SetText(message)
                     indicatorMessage = message
@@ -240,7 +269,7 @@ DFRL:NewMod("Chat", 1, function()
                     indicator:Show()
                     indicatorShown = true
                 end
-            elseif indicatorShown then
+            elseif indicatorShown and (visible or root:IsVisible()) then
                 indicator:Hide()
                 indicatorShown = false
             end
@@ -269,12 +298,13 @@ DFRL:NewMod("Chat", 1, function()
             local now = GetTime()
             state.lastActivity = now
             state.slideStart = not performanceMode and state == selected and root:IsVisible() and now or nil
+            if state.slideStart then activeStates[state] = true end
             if state ~= selected or not AtBottom(state) then state.unread = true end
             if UpdateIndicator then UpdateIndicator() end
         end
 
         PositionInput = function()
-            if not input then return end
+            if not input or not root:IsVisible() or not input:IsVisible() then return end
             if not HasAnchor(input, "TOPLEFT", root, "BOTTOMLEFT", -1, -1) then
                 input:ClearAllPoints()
                 input:SetPoint("TOPLEFT", root, "BOTTOMLEFT", -1, -1)
@@ -325,6 +355,7 @@ DFRL:NewMod("Chat", 1, function()
             -- Only approved message categories are formatted. Rendering still
             -- uses the actual native frame, with raw-text fallback on failure.
             native:SetParent(root)
+            native:SetFrameStrata(STRATA)
             LockNativeMovement(native)
             PositionNative(state, GetTime(), true)
             FadeSettings(state, false)
@@ -338,11 +369,11 @@ DFRL:NewMod("Chat", 1, function()
             native:EnableMouse(state == selected)
             native:EnableMouseWheel(state == selected)
             native:SetScript("OnMouseWheel", function() Scroll(state, arg1 or 0) end)
-            local setAlpha = native.SetAlpha
+            state.nativeSetAlpha = native.SetAlpha
             native.SetAlpha = function(frame)
                 if not root:IsVisible() then return end
                 local alpha = state == selected and (state.visualAlpha or 1) or 0
-                if frame:GetAlpha() ~= alpha then setAlpha(frame, alpha) end
+                if frame:GetAlpha() ~= alpha then state.nativeSetAlpha(frame, alpha) end
             end
             native:SetAlpha(1)
             local addMessage = native.AddMessage
@@ -408,6 +439,7 @@ DFRL:NewMod("Chat", 1, function()
                         addToStart = addToStart,
                         deadline = GetTime() + 0.25,
                     }
+                    activeStates[state] = true
                     return
                 end
                 local pending = state.pendingLevel
@@ -489,9 +521,14 @@ DFRL:NewMod("Chat", 1, function()
             if native.SetResizable then native:SetResizable(true) end
         end
 
+        local firstUnattached = 1
         RefreshFrames = function()
-            for i = 1, NUM_CHAT_WINDOWS or 7 do
-                AttachNative(i)
+            for i = firstUnattached, NUM_CHAT_WINDOWS or 7 do
+                if not states[i] then AttachNative(i) end
+            end
+            -- A missing slot can appear later, even with higher slots attached.
+            while states[firstUnattached] do
+                firstUnattached = firstUnattached + 1
             end
         end
 
@@ -512,6 +549,7 @@ DFRL:NewMod("Chat", 1, function()
                 other.native:EnableMouse(other == selected)
                 other.native:EnableMouseWheel(other == selected)
                 PositionNative(other, now, true)
+                FadeSettings(other, other == selected and not AtBottom(other))
             end
             state.native:Show()
             if FCF_StopAlertFlash then FCF_StopAlertFlash(state.native) end
@@ -523,7 +561,7 @@ DFRL:NewMod("Chat", 1, function()
 
         if input then
             input:SetParent(UIParent)
-            input:SetFrameStrata("LOW")
+            input:SetFrameStrata(STRATA)
             input:SetFrameLevel(root:GetFrameLevel() + 6)
             for _, region in ipairs({ input:GetRegions() }) do
                 if region.GetObjectType and region:GetObjectType() == "Texture" then HideControl(region) end
@@ -572,8 +610,9 @@ DFRL:NewMod("Chat", 1, function()
             -- Only wheel navigation uncovers retained history. Hover and input
             -- focus never rearm lines or hold their fading.
             local atBottom = not selected or AtBottom(selected)
-            local held = not atBottom
-            for _, state in pairs(states) do
+            -- Settled panes have no animation or pending delivery to visit.
+            -- Scroll/visibility repair below still follows the selected pane.
+            for state in pairs(activeStates) do
                 if state.pendingLevel or state.revealStart or state.slideStart then now = now or GetTime() end
                 if state.pendingLevel and now >= state.pendingLevel.deadline then
                     state.FlushLevel()
@@ -589,16 +628,20 @@ DFRL:NewMod("Chat", 1, function()
                     if state == selected then PositionNative(state, now) end
                     if now - state.slideStart >= SLIDE then state.slideStart = nil end
                 end
-                FadeSettings(state, state == selected and held)
+                if not state.pendingLevel and not state.revealStart and not state.slideStart then
+                    activeStates[state] = nil
+                end
             end
             if selected then
-                selected.native:SetAlpha(1)
+                local alpha = selected.visualAlpha or 1
+                if selected.native:GetAlpha() ~= alpha then selected.nativeSetAlpha(selected.native, alpha) end
                 if not Flag(selected.native:IsShown()) then
                     selected.native:Show()
                     atBottom = nil
                 end
                 if atBottom == nil then atBottom = AtBottom(selected) end
                 if atBottom then selected.unread = false end
+                FadeSettings(selected, not atBottom)
             end
             UpdateIndicator(atBottom)
             refresh = refresh + elapsed
@@ -608,9 +651,10 @@ DFRL:NewMod("Chat", 1, function()
                 ReadDimensions()
                 PositionInput()
                 RefreshFrames()
-                for _, state in pairs(states) do
-                    PositionNative(state, now, true)
-                end
+                -- Only the selected pane can render. Inactive panes recover
+                -- immediately on selection/native events/Show instead of an
+                -- all-window font and geometry sweep every second.
+                if selected then PositionNative(selected, now, true) end
             end
         end
         root:SetScript("OnUpdate", UpdateChat)
@@ -620,6 +664,7 @@ DFRL:NewMod("Chat", 1, function()
             performanceMode = enabled
             for _, state in pairs(states) do
                 state.slideStart, state.revealStart = nil, nil
+                activeStates[state] = state.pendingLevel and true or nil
                 state.visualAlpha = 1
                 if root:IsVisible() then
                     state.native:SetAlpha(1)
@@ -631,25 +676,29 @@ DFRL:NewMod("Chat", 1, function()
         HookScript(root, "OnHide", function()
             for _, state in pairs(states) do
                 state.slideStart, state.revealStart = nil, nil
+                activeStates[state] = state.pendingLevel and true or nil
             end
         end)
         HookScript(root, "OnShow", function()
             ReadDimensions()
+            PositionInput()
             for _, state in pairs(states) do
                 state.visualAlpha = 1
                 state.native:SetAlpha(1)
                 PositionNative(state, GetTime(), true)
+                FadeSettings(state, state == selected and not AtBottom(state))
             end
             UpdateIndicator()
         end)
-        DFRL.layout.Register("chat", root, nil, {
+        DFRL.layout.Register("chat", root, AnchorDefault, {
             region = moveRegion,
             resize = "dimensions",
             edgeHandles = true,
-            minWidth = 240,
+            minWidth = MIN_WIDTH,
             minHeight = 120,
             maxWidth = 2400,
             maxHeight = 1600,
+            defaultWidth = DefaultGeometry,
             onResize = function(frame)
                 rootWidth, rootHeight = frame:GetWidth(), frame:GetHeight()
                 if not T.NearlyEqual(indicator:GetWidth(), rootWidth) then indicator:SetWidth(rootWidth) end

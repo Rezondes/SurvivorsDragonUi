@@ -3,15 +3,14 @@
 DFRL:NewMod("GuardianRoster", 2, function()
     local roster = {}
     DFRL.guardians = roster
-    local lairs, changes = {}, {}
+    local lairs = {}
     local revision, generation = 0, 0
     local stamp, packet, clock
     local zone
     local unitGeneration, blockedUnitGeneration = 0, -1
     local blockedUnits, blockedUnitStamp
-    local droppedThroughRevision = 0
     local ready = false
-    local MAX_SMOOTHING, MAX_CHANGES = 1.5, 64
+    local MAX_SMOOTHING = 1.5
     local copiedFields = { "left", "x", "y", "z", "mx", "my" }
     local health, healthSeen = {}, {}
 
@@ -25,7 +24,7 @@ DFRL:NewMod("GuardianRoster", 2, function()
     end
     local function Active()
         local navigation = DFRL.navigation
-        return navigation and navigation.IsRunPhase(Native("AZS_GetPhase")) or false
+        return navigation and navigation.IsRunPhase(navigation.Phase()) or false
     end
     local function Living(row) return row.state == "asleep" or row.state == "awake" end
     local function Copy(row, copy)
@@ -43,32 +42,14 @@ DFRL:NewMod("GuardianRoster", 2, function()
         blockedUnits, blockedUnitStamp = _G.AZS_UNITS, _G.AZS_UNITS_UPDATED
         blockedUnitGeneration = unitGeneration
         if not ready then return end
-        lairs, changes = {}, {}
+        lairs = {}
         stamp, packet, clock, zone = nil, nil, nil, nil
         ready = false
         generation = generation + 1
         revision = revision + 1
-        droppedThroughRevision = revision
     end
 
     function roster.UnitsReceived() unitGeneration = unitGeneration + 1 end
-
-    local function Change(kind, row, previous)
-        table.insert(changes, {
-            revision = revision,
-            kind = kind,
-            index = row.index,
-            id = row.id,
-            previousId = previous.id,
-            state = row.state,
-            previousState = previous.state,
-            name = row.name,
-        })
-        if table.getn(changes) > MAX_CHANGES then
-            local removed = table.remove(changes, 1)
-            droppedThroughRevision = removed.revision
-        end
-    end
 
     -- Called only with copied rows from the existing accepted lair snapshot.
     -- The private source table is never read here or exposed to consumers.
@@ -86,10 +67,7 @@ DFRL:NewMod("GuardianRoster", 2, function()
             zone = nil
         end
         if ready and stamp == updated and packet == received then return end
-        local nextLairs, previous, seen = {}, {}, {}
-        for _, row in ipairs(lairs) do
-            previous[row.index] = row
-        end
+        local nextLairs, seen = {}, {}
         for _, row in ipairs(rows) do
             if
                 type(row) ~= "table"
@@ -112,24 +90,6 @@ DFRL:NewMod("GuardianRoster", 2, function()
             table.insert(nextLairs, copy)
         end
         revision = revision + 1
-        if ready then
-            for _, row in ipairs(nextLairs) do
-                local old = previous[row.index]
-                -- An initial/replayed row establishes a baseline. Missing lairs
-                -- do not establish a death, and a new spawn is never the old one.
-                if old then
-                    if Living(old) and not Living(row) then
-                        Change("vacated", row, old)
-                    elseif not Living(old) and Living(row) then
-                        Change("returned", row, old)
-                    elseif Living(old) and Living(row) and old.id ~= row.id then
-                        Change("replaced", row, old)
-                    elseif old.state ~= row.state then
-                        Change("state", row, old)
-                    end
-                end
-            end
-        end
         lairs, stamp, packet = nextLairs, updated, received
         local now = Native("AZS_GetRunTime")
         clock = Number(now) and now or nil
@@ -183,14 +143,16 @@ DFRL:NewMod("GuardianRoster", 2, function()
     end
 
     -- Callers may reuse their own copy; accepted private rows are never exposed.
-    -- No UI clock advances gameplay.
-    function roster.GetSnapshot(snapshot)
+    -- The tracker shows fighting health and reads countdowns when dead rows are shown.
+    -- Other callers get the full snapshot when the tracker choice is absent.
+    function roster.GetSnapshot(snapshot, trackerShowDead)
         snapshot = snapshot or { rows = {}, counts = {} }
+        local changed = snapshot.revision ~= revision or snapshot.generation ~= generation or snapshot.status ~= "ready"
         snapshot.revision, snapshot.generation, snapshot.status = revision, generation, "inactive"
         local counts = snapshot.counts
-        counts.total, counts.living, counts.asleep, counts.fighting = 0, 0, 0, 0
-        counts.returning, counts.due, counts.empty = 0, 0, 0
         if not Active() then
+            counts.total, counts.living, counts.asleep, counts.fighting = 0, 0, 0, 0
+            counts.returning, counts.due, counts.empty = 0, 0, 0
             for index in ipairs(snapshot.rows) do
                 snapshot.rows[index] = nil
             end
@@ -200,6 +162,8 @@ DFRL:NewMod("GuardianRoster", 2, function()
         end
         snapshot.status = ready and "ready" or "unavailable"
         if not ready then
+            counts.total, counts.living, counts.asleep, counts.fighting = 0, 0, 0, 0
+            counts.returning, counts.due, counts.empty = 0, 0, 0
             for index in ipairs(snapshot.rows) do
                 snapshot.rows[index] = nil
             end
@@ -207,60 +171,73 @@ DFRL:NewMod("GuardianRoster", 2, function()
             snapshot.zone = nil
             return snapshot
         end
-        snapshot.zone = zone and Copy(zone, snapshot.zone) or nil
+        -- Only accepted lair publications change roster identity, status and
+        -- counts. Read requested health and remaining time fresh each pass.
+        if changed then
+            counts.total, counts.living, counts.asleep, counts.fighting = 0, 0, 0, 0
+            counts.returning, counts.due, counts.empty = 0, 0, 0
+        end
+        if not zone then
+            snapshot.zone = nil
+        elseif
+            not snapshot.zone
+            or snapshot.zone.key ~= zone.key
+            or snapshot.zone.name ~= zone.name
+            or snapshot.zone.map ~= zone.map
+        then
+            snapshot.zone = Copy(zone, snapshot.zone)
+        end
         local health
         local now, clockRead
         for index, entry in ipairs(lairs) do
-            local row = Copy(entry, snapshot.rows[index])
-            counts.total = counts.total + 1
+            local row = snapshot.rows[index]
+            if changed then
+                row = Copy(entry, row)
+                counts.total = counts.total + 1
+                if Living(row) then
+                    row.status = row.state == "awake" and "fighting" or "asleep"
+                    counts.living = counts.living + 1
+                elseif Number(row.left) and row.left > 0 then
+                    row.status = "returning"
+                elseif row.left == 0 then
+                    row.status = "due"
+                else
+                    row.status = "empty"
+                end
+                counts[row.status] = counts[row.status] + 1
+                snapshot.rows[index] = row
+            end
             if Living(row) then
-                if not health then health = Health() end
-                row.status = row.state == "awake" and "fighting" or "asleep"
-                counts.living = counts.living + 1
-                local unit = health[row.id]
-                if unit then
-                    row.hp, row.maximum = unit.hp, unit.maximum
-                    row.healthFraction = math.max(0, math.min(1, unit.hp / unit.maximum))
+                row.hp, row.maximum, row.healthFraction = nil, nil, nil
+                if trackerShowDead == nil or row.state == "awake" then
+                    if not health then health = Health() end
+                    local unit = health[row.id]
+                    if unit then
+                        row.hp, row.maximum = unit.hp, unit.maximum
+                        row.healthFraction = math.max(0, math.min(1, unit.hp / unit.maximum))
+                    end
                 end
             elseif Number(row.left) and row.left > 0 then
-                if not clockRead then
-                    now, clockRead = Native("AZS_GetRunTime"), true
+                if trackerShowDead == false then
+                    row.remaining = nil
+                else
+                    if not clockRead then
+                        now, clockRead = Native("AZS_GetRunTime"), true
+                    end
+                    row.remaining = roster.Remaining(row.left, now)
                 end
-                row.status = "returning"
-                row.remaining = roster.Remaining(row.left, now)
             elseif row.left == 0 then
                 -- Due is confirmed by the native snapshot. A cosmetic zero
                 -- above never invents a return, spawn, or state transition.
-                row.status, row.remaining = "due", 0
-            else
-                row.status = "empty"
+                row.remaining = 0
             end
-            counts[row.status] = counts[row.status] + 1
-            snapshot.rows[index] = row
         end
-        for index = table.getn(lairs) + 1, table.getn(snapshot.rows) do
-            snapshot.rows[index] = nil
+        if changed then
+            for index = table.getn(lairs) + 1, table.getn(snapshot.rows) do
+                snapshot.rows[index] = nil
+            end
+            table.setn(snapshot.rows, table.getn(lairs))
         end
-        table.setn(snapshot.rows, table.getn(lairs))
         return snapshot
-    end
-
-    -- Optional future notification consumers use revision + generation as a
-    -- cursor. Nothing emits chat, sound or alerts in this foundation.
-    function roster.GetChanges(afterRevision, afterGeneration)
-        local result = { revision = revision, generation = generation, entries = {}, reset = false }
-        if not Active() or not ready then
-            result.reset = true
-            return result
-        end
-        if not Integer(afterRevision, 0) or afterRevision > revision or afterGeneration ~= generation then
-            result.reset = true
-            return result
-        end
-        result.truncated = afterRevision < droppedThroughRevision
-        for _, change in ipairs(changes) do
-            if change.revision > afterRevision then table.insert(result.entries, Copy(change)) end
-        end
-        return result
     end
 end)

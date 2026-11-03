@@ -42,6 +42,8 @@ IDs, so no individual totem frames or identities are manufactured.
 The optional timer shows the getter's earliest expiry for that kind, rounded
 up like pet timers. It stays `--:--` until `AZS_GetRunTime()` is available and
 finite, even if the getter computed a value against its pre-run zero fallback.
+The reader samples the clock once per refresh when at least one kind supplies
+a usable remaining time. Empty feeds and feeds without usable times skip it.
 No UI clock is subtracted from a raw deadline. Reaching zero keeps the native
 count until a new snapshot changes it. Duration can describe a different
 captured instance than the earliest expiry; neither is used to infer other
@@ -142,6 +144,12 @@ supplies remaining time. A still-listed creature at zero remains counted until
 the native roster removes it. Unavailable temporary timing shows `--:--`.
 For a mixed group, only temporary members contribute to the earliest timer;
 one unavailable member leaves that timer unknown.
+
+Timer-only samples reuse the combined row list and settled geometry, skipping
+static icon/name/count preparation while updating countdown captions. Native
+metadata changes still repaint the affected row; group-count changes rebuild
+the list and layout. Display choices, Show, scale, changed root bounds and
+failed artwork retain their existing next-reader recovery in both modes.
 
 Names, counts and status labels call `SetText` only when the displayed string
 changes. The root's Show/Hide calls occur only on visibility transitions. Hidden

@@ -1,24 +1,32 @@
 -- Five equipped jewelry sockets, attached by default and optionally independent.
 --[[
-The selected thin-bezel design keeps the Blizzard circular rim artwork, with
-native rarity colors for equipped items and the original gold for empty slots.
-SocketRail BLP strips join all upper socket arches and straight spans on one baseline
-using pixels from the existing HDActionBar.tga. The original bar texture is
-unchanged; only its narrow top strip switches while this jewelry row is visible.
-No extra inner or lower curved line is drawn beneath the gold circles.
-SocketDetached.blp retains the silver-gray circle borders in detached mode.
+Selected 03 Runecarver housings use grey metal matching the action-bar surround.
+Known poor through legendary items use a crown gem, three socket stones and
+a static outer halo baked over the original grey housing. Poor and common
+share the silver treatment. Effects-only hover text keeps native rarity RGB.
+Empty slots and unavailable or unsupported qualities use the neutral crop.
+Five housing regions inherit the overlay's visibility and scale in both modes.
+SocketRail BLP strips retain the straight bar edge and small bottom arch with
+clear item openings, using pixels from the existing HDActionBar.tga. Only its
+narrow top strip switches while this jewelry row is visible. The old circle's
+top/sides and detached backing no longer sit behind the Runecarver housings.
 EmptyNeck.blp, EmptyRing.blp and EmptyTrinket.blp use Blizzard's original
-paper-doll placeholders, fitted inside the circular rim without cropping.
+paper-doll placeholders, fitted inside the carving without cropping.
 Texture conversion does not change the underlying artwork's ownership.
 No upstream Lua is imported. Sources and preparation: third_party/Jewelry-ARTWORK.md.
 
-Gold circular rim source: commit b8b35451d4621a8097e887385f72ec03e17765f1,
+Runecarver housing: Blizzard's Runecarving/RuneCarvingUI.PNG from Gethe's
+wow-ui-textures mirror, commit da4d3587e46ee7db8655b978d49b7d55024084ff,
+Shadowlands 9.0.5 build 37705. The runes-lit frame and baked halo retain
+Blizzard Entertainment's artwork ownership; MIT below does not relicense them.
+
+Shared pet/meter rim source: commit b8b35451d4621a8097e887385f72ec03e17765f1,
 Textures/bagborder2.blp; provenance is recorded in the document above.
 Empty-slot artwork: Gethe/wow-ui-textures, commit
 e80e3278cc833c89e1f3fc79557b68315d750935, PaperDoll/UI-PaperDoll-Slot-
 Finger.PNG, -Neck.PNG and -Trinket.PNG. World of Warcraft artwork remains
 copyright Blizzard Entertainment, distinct from the software license below.
-The transparent circular cooldown atlas is original generated geometry.
+The gems and rarity halo are original generated artwork.
 
 Applicable source notices (Blizzard artwork is distinct from MIT software):
 MIT License
@@ -44,10 +52,35 @@ SOFTWARE.
 ]]
 DFRL:NewMod("Jewelry", 4, function()
     local WIDTH, HEIGHT, ICON_SIZE, INTERVAL = 317, 88, 32, 0.2
+    local ICON_ART_SIZE = 33.897596
     local RIM_SIZE = 43
     local ICON_ZOOM = 1.05
     local iconSpan = 1 / ICON_ZOOM
     local iconInset = (1 - iconSpan) / 2
+    local function PrepareIconParts()
+        local parts = {}
+        local scale = ICON_ART_SIZE / ICON_SIZE
+        local padding = (ICON_SIZE - ICON_ART_SIZE) / 2
+        for part = 1, 16 do
+            local top, bottom = (part - 1) * 2, part * 2
+            local edge = math.max(math.abs(top - 16), math.abs(bottom - 16))
+            -- The old outer-edge formula made both end caps zero-width.
+            -- Sample their midpoint so the complete image height is retained.
+            if part == 1 or part == 16 then edge = 15 end
+            local half = math.sqrt(math.max(0, 256 - edge * edge))
+            table.insert(parts, {
+                left = 16 - half * scale,
+                top = padding + top * scale,
+                width = half * 2 * scale,
+                height = 2 * scale,
+                firstU = iconInset + (16 - half) * iconSpan / ICON_SIZE,
+                lastU = iconInset + (16 + half) * iconSpan / ICON_SIZE,
+                firstV = iconInset + top * iconSpan / ICON_SIZE,
+                lastV = iconInset + bottom * iconSpan / ICON_SIZE,
+            })
+        end
+        return parts
+    end
     local actionDefaults = DFRL.actionBarDefaults
     if
         type(actionDefaults) ~= "table"
@@ -63,8 +96,12 @@ DFRL:NewMod("Jewelry", 4, function()
     local defaultScale = actionDefaults.buttonWidth / RIM_SIZE
     local columnPitch = (actionDefaults.buttonWidth + actionDefaults.buttonGap) / defaultScale
     local socketSize = RIM_SIZE * 40 / 36
-    local ANIMATION_INTERVAL = 1 / 30
+    local carvingSize = RIM_SIZE * 128 / 108
+    local socketBounds = math.max(socketSize, carvingSize)
     local texturePath = DFRL:GetInfoOrCons("tex") .. "jewelry\\"
+    local SHARED_CARVING = texturePath .. "Frame.blp"
+    local GEMMED_CARVING = texturePath .. "GemmedRunecarver.blp"
+    local ATTACHED_CARVING = texturePath .. "AttachedRunecarver.blp"
     local SLOT_NAMES = { "Finger0Slot", "Finger1Slot", "NeckSlot", "Trinket0Slot", "Trinket1Slot" }
     local EMPTY_TEXTURES = {
         "EmptyRing.blp",
@@ -74,8 +111,7 @@ DFRL:NewMod("Jewelry", 4, function()
         "EmptyTrinket.blp",
     }
     local slots, slotsReady = {}, false
-    local inWorld, editing, attached, elapsed, animationElapsed = true, false, false, 0, 0
-    local cooldownsActive = false
+    local inWorld, editing, attached, elapsed = true, false, false, 0
     local shownWanted, wantedDocked, SyncUpdates, cleared = false, nil, nil, true
     local displayGeometry = {}
     local function Docked()
@@ -411,24 +447,9 @@ DFRL:NewMod("Jewelry", 4, function()
     artwork:EnableMouse(false)
     local iconProbe = artwork:CreateTexture(nil, "ARTWORK")
     iconProbe:Hide()
-    local iconParts, iconPool, iconGroups, iconByTexture, iconsDirty = {}, {}, {}, {}, false
-    for part = 1, 16 do
-        local top, bottom = (part - 1) * 2, part * 2
-        local edge = math.max(math.abs(top - 16), math.abs(bottom - 16))
-        local half = math.sqrt(math.max(0, 256 - edge * edge))
-        if half > 0 then
-            table.insert(iconParts, {
-                left = 16 - half,
-                top = top,
-                width = half * 2,
-                firstU = iconInset + (16 - half) * iconSpan / ICON_SIZE,
-                lastU = iconInset + (16 + half) * iconSpan / ICON_SIZE,
-                firstV = iconInset + top * iconSpan / ICON_SIZE,
-                lastV = iconInset + bottom * iconSpan / ICON_SIZE,
-            })
-        end
-    end
+    local iconParts, iconPool, iconGroups, iconByTexture, iconsDirty = PrepareIconParts(), {}, {}, {}, false
     local function SetIcon(slot, texture)
+        slot.empty = nil
         -- A failed native texture assignment keeps the preceding slot artwork.
         -- Probe from empty so a retained image cannot masquerade as success.
         iconProbe:SetTexture(nil)
@@ -493,7 +514,7 @@ DFRL:NewMod("Jewelry", 4, function()
                     end
                     if strip.jewelryPart ~= part then
                         strip:SetWidth(part.width)
-                        strip:SetHeight(2)
+                        strip:SetHeight(part.height)
                         strip:SetTexCoord(part.firstU, part.lastU, part.firstV, part.lastV)
                         strip.jewelryPart = part
                     end
@@ -519,25 +540,15 @@ DFRL:NewMod("Jewelry", 4, function()
         button:SetHeight(ICON_SIZE)
         button:SetPoint("TOPLEFT", hud, "TOPLEFT", WIDTH / 2 - ICON_SIZE / 2 + (index - 3) * columnPitch, -30.5)
         button:EnableMouse(true)
-        local slot = { name = name, button = button }
+        local slot = { name = name, button = button, orderKey = tostring(index), position = index }
         local placeholder = button:CreateTexture(nil, "ARTWORK")
         placeholder:SetTexture(texturePath .. EMPTY_TEXTURES[index])
-        placeholder:SetAllPoints(button)
+        placeholder:SetWidth(ICON_ART_SIZE)
+        placeholder:SetHeight(ICON_ART_SIZE)
+        placeholder:SetPoint("CENTER", button, "CENTER", 0, 0)
         placeholder:Hide()
         slot.placeholder = placeholder
-        local socket = hud:CreateTexture(nil, "BACKGROUND")
-        socket:SetTexture(texturePath .. "SocketDetached.blp")
-        socket:SetWidth(socketSize)
-        socket:SetHeight(socketSize)
-        socket:SetPoint("CENTER", button, "CENTER", 0, 0)
-        socket:SetTexCoord(0, 160 / 256, 0, 160 / 256)
-        socket:Hide()
-        slot.socket = socket
-        local cooldown = button:CreateTexture(nil, "OVERLAY")
-        cooldown:SetTexture(texturePath .. "Cooldown.blp")
-        cooldown:SetAllPoints(button)
-        cooldown:Hide()
-        slot.cooldown = cooldown
+        slot.placeholderShown = false
         button:SetScript("OnEnter", function() ShowTooltip(slot) end)
         button:SetScript("OnLeave", function() HideTooltip(slot) end)
         button:SetScript("OnHide", function() HideTooltip(slot) end)
@@ -545,38 +556,66 @@ DFRL:NewMod("Jewelry", 4, function()
         table.insert(slots, slot)
     end
 
-    -- Reuse one rim crop independently so socket spacing can match the buttons.
+    -- The carving is the only jewelry surround; no separate inner rim is drawn.
     local overlay = CreateFrame("Frame", nil, hud)
     overlay:SetAllPoints(hud)
     overlay:SetFrameLevel(hud:GetFrameLevel() + 3)
     overlay:EnableMouse(false)
     for _, slot in ipairs(slots) do
-        local rim = overlay:CreateTexture(nil, "OVERLAY")
-        rim:SetTexture(texturePath .. "Frame.blp")
-        rim:SetWidth(RIM_SIZE * 72 / 86)
-        rim:SetHeight(RIM_SIZE * 72 / 86)
-        rim:SetPoint("CENTER", slot.button, "CENTER", 0, 0)
-        -- Trim the source rim's uneven clear padding; its visible circle is
-        -- centered in this square crop rather than the full source rectangle.
-        -- Compensate the crop size to preserve the visible rim's diameter.
-        rim:SetTexCoord(1 / 512, 73 / 512, 1 / 128, 73 / 128)
-        slot.rim = rim
+        local carving = overlay:CreateTexture(nil, "BORDER")
+        carving:SetWidth(carvingSize)
+        carving:SetHeight(carvingSize)
+        carving:SetPoint("CENTER", slot.button, "CENTER", 0, 0)
+        carving:Hide()
+        slot.carving, slot.carvingPending = carving, true
+    end
+    local function PaintCarving(slot, quality)
+        local docked = wantedDocked == true and quality > 0
+        local path = docked and ATTACHED_CARVING or (quality < 2 and SHARED_CARVING or GEMMED_CARVING)
+        if slot.carvingQuality == quality and slot.carvingPath == path then return true end
+        local carving = slot.carving
+        if slot.carvingPath ~= path then
+            local loaded = carving:SetTexture(path)
+            if not T.TextureAssigned(loaded, carving:GetTexture(), path) then
+                slot.carvingQuality, slot.carvingPath = nil, nil
+                return false
+            end
+        end
+        local left = quality < 2 and (256 + quality * 128) or (quality - 2) * 128
+        local top, bottom = 0, 1
+        if docked then
+            left = math.mod(quality - 1, 4) * 128
+            top = quality == 5 and 0.5 or 0
+            bottom = top + 0.5
+        end
+        carving:SetTexCoord(left / 512, (left + 128) / 512, top, bottom)
+        slot.carvingQuality, slot.carvingPath = quality, path
+        return true
+    end
+    local function UpdateRarity(slot)
+        if not hud:IsVisible() then
+            slot.carvingPending = true
+            return
+        end
+        local rank = slot.texture and slot.qualityR and slot.quality
+        -- Crop 0 is the unadorned housing. Poor and common share crop 1.
+        local quality = rank and rank <= 5 and math.max(1, rank) or 0
+        local ready = PaintCarving(slot, quality)
+        local shown = ready or (quality ~= 0 and PaintCarving(slot, 0))
+        if shown and not slot.carving:IsShown() then
+            slot.carving:Show()
+        elseif not shown and slot.carving:IsShown() then
+            slot.carving:Hide()
+        end
+        slot.carvingPending = not ready
     end
     local function SetQuality(slot, quality, red, green, blue)
-        if (slot.qualityR ~= nil) ~= (red ~= nil) then
-            -- The neutral copy keeps the same shading and alpha without
-            -- multiplying rarity colors by the stock gold's yellow channels.
-            local left = red ~= nil and 257 or 1
-            slot.rim:SetTexCoord(left / 512, (left + 72) / 512, 1 / 128, 73 / 128)
-        end
-        if
-            (slot.qualityR or 1) ~= (red or 1)
-            or (slot.qualityG or 1) ~= (green or 1)
-            or (slot.qualityB or 1) ~= (blue or 1)
-        then
-            slot.rim:SetVertexColor(red or 1, green or 1, blue or 1, 1)
-        end
+        local changed = slot.quality ~= quality
+            or slot.qualityR ~= red
+            or slot.qualityG ~= green
+            or slot.qualityB ~= blue
         slot.quality, slot.qualityR, slot.qualityG, slot.qualityB = quality, red, green, blue
+        return changed
     end
     local function UpdateQuality(slot)
         if type(GetInventoryItemQuality) == "function" then
@@ -604,31 +643,52 @@ DFRL:NewMod("Jewelry", 4, function()
                     and blue >= 0
                     and blue <= 1
                 then
-                    SetQuality(slot, quality, red, green, blue)
-                    return
+                    return SetQuality(slot, quality, red, green, blue)
                 end
             end
         end
         -- Unavailable metadata retries at the existing equipment cadence.
         -- Never retain another item's rarity or suppress an otherwise valid icon.
-        SetQuality(slot)
+        return SetQuality(slot)
     end
-    local function ClearSlot(slot)
+    local function SetPlaceholderShown(slot, shown)
+        shown = shown and true or false
+        if slot.placeholderShown == shown then return end
+        if shown then
+            slot.placeholder:Show()
+        else
+            slot.placeholder:Hide()
+        end
+        slot.placeholderShown = shown
+    end
+    local function ClearSlot(slot, placeholderShown)
+        -- Empty slots still read native inventory at five Hz. Their already
+        -- retired artwork and metadata need no repeated cleanup behind it.
+        if
+            slot.empty
+            and not slot.texture
+            and not slot.artTexture
+            and not slot.effectDescription
+            and slot.placeholderShown == (placeholderShown and true or false)
+        then
+            -- A hidden clear can retire equipment before repainting the housing.
+            if slot.carvingPending then UpdateRarity(slot) end
+            return
+        end
         slot.effectLink, slot.effectLanguage, slot.effectDescription = nil, nil, nil
-        slot.placeholder:Hide()
+        SetPlaceholderShown(slot, placeholderShown)
         if slot.texture or slot.artTexture then iconsDirty = true end
         slot.texture, slot.artTexture = nil, nil
-        slot.cooldown:Hide()
-        slot.start, slot.duration, slot.painted = nil, nil, nil
         SetQuality(slot)
+        UpdateRarity(slot)
         HideTooltip(slot)
+        slot.empty = true
     end
     local function Clear()
         if cleared then return end
         cleared = true
         shownWanted, wantedDocked = false, nil
         formattedCache, cacheSize = {}, 0
-        cooldownsActive = false
         for _, slot in ipairs(slots) do
             ClearSlot(slot)
         end
@@ -644,7 +704,7 @@ DFRL:NewMod("Jewelry", 4, function()
         end
     end)
     hud:SetScript("OnShow", function()
-        elapsed, animationElapsed = INTERVAL, ANIMATION_INTERVAL
+        elapsed = INTERVAL
         if SyncUpdates then SyncUpdates() end
         if DFRL.SetJewelryBarShown then DFRL.SetJewelryBarShown(Docked()) end
     end)
@@ -663,51 +723,6 @@ DFRL:NewMod("Jewelry", 4, function()
         slotsReady = true
         return true
     end
-    local function UpdateCooldown(slot)
-        if type(GetInventoryItemCooldown) ~= "function" then
-            slot.start, slot.duration = nil, nil
-            return
-        end
-        local ok, start, duration, enabled = pcall(GetInventoryItemCooldown, "player", slot.id)
-        if
-            not ok
-            or not Number(start)
-            or not Number(duration)
-            or not Number(enabled)
-            or start <= 0
-            or duration <= 0
-            or enabled <= 0
-        then
-            slot.start, slot.duration = nil, nil
-            return
-        end
-        slot.start, slot.duration = start, duration
-    end
-    local function PaintCooldowns()
-        if not cooldownsActive or not hud:IsVisible() then return end
-        local now = type(GetTime) == "function" and GetTime() or nil
-        local active = false
-        for _, slot in ipairs(slots) do
-            local frame
-            if slot.texture and Number(now) and slot.start and slot.duration then
-                local remaining = slot.duration - (now - slot.start)
-                if remaining > 0 then frame = math.ceil(math.min(1, remaining / slot.duration) * 63) end
-            end
-            if frame then
-                if frame ~= slot.painted then
-                    local column, row = math.mod(frame, 8), math.floor(frame / 8)
-                    slot.cooldown:SetTexCoord(column / 8, (column + 1) / 8, row / 8, (row + 1) / 8)
-                    slot.cooldown:Show()
-                    slot.painted = frame
-                end
-            elseif slot.painted then
-                slot.cooldown:Hide()
-                slot.painted = nil
-            end
-            if slot.start or slot.painted then active = true end
-        end
-        cooldownsActive = active
-    end
     local function CanPaint()
         local docked = Docked()
         local owner = docked and DFRL.mainBar or UIParent
@@ -725,6 +740,11 @@ DFRL:NewMod("Jewelry", 4, function()
         end
         local docked = Docked()
         if not shownWanted or wantedDocked ~= docked then
+            if wantedDocked ~= docked then
+                for _, slot in ipairs(slots) do
+                    if slot.carvingQuality and slot.carvingQuality > 0 then slot.carvingPending = true end
+                end
+            end
             cleared = false
             shownWanted, wantedDocked = true, docked
             if docked then
@@ -744,24 +764,42 @@ DFRL:NewMod("Jewelry", 4, function()
             Clear()
             return
         end
-        cooldownsActive = false
         for _, slot in ipairs(slots) do
             local ok, texture = pcall(GetInventoryItemTexture, "player", slot.id)
             if ok and type(texture) == "string" and texture ~= "" then
-                slot.placeholder:Hide()
+                if slot.placeholderShown ~= false then SetPlaceholderShown(slot, false) end
                 if slot.texture ~= texture then SetIcon(slot, texture) end
-                UpdateQuality(slot)
-                UpdateCooldown(slot)
+                local qualityChanged = UpdateQuality(slot)
+                if qualityChanged or slot.carvingPending then UpdateRarity(slot) end
                 if hoveredSlot == slot then ShowTooltip(slot) end
             else
-                ClearSlot(slot)
-                if ok and (texture == nil or texture == "") then slot.placeholder:Show() end
+                ClearSlot(slot, ok and (texture == nil or texture == ""))
             end
-            if slot.start or slot.painted then cooldownsActive = true end
         end
-        PaintIcons()
+        if iconsDirty then PaintIcons() end
+    end
+    local function PlaceSlots()
+        if not inWorld or not attached or not DFRL.display.Get("equippedJewelry") then return end
+        local order = DFRL.display.Get("jewelryCustomOrder") and DFRL.display.Get("jewelryOrder") or "12345"
+        if displayGeometry.order == order then return end
+        displayGeometry.order = order
+        for _, slot in ipairs(slots) do
+            local position = string.find(order, slot.orderKey, 1, true)
+            if slot.position ~= position then
+                slot.button:ClearAllPoints()
+                slot.button:SetPoint(
+                    "TOPLEFT",
+                    hud,
+                    "TOPLEFT",
+                    WIDTH / 2 - ICON_SIZE / 2 + (position - 3) * columnPitch,
+                    -30.5
+                )
+                slot.position = position
+            end
+        end
     end
     local function UpdateDisplay()
+        PlaceSlots()
         local docked = Docked()
         if attached then
             local owner = docked and DFRL.mainBar or detached
@@ -783,28 +821,28 @@ DFRL:NewMod("Jewelry", 4, function()
             end
             for _, slot in ipairs(slots) do
                 if slot.button:GetFrameLevel() ~= level + 1 then slot.button:SetFrameLevel(level + 1) end
-                if docked then
-                    if slot.socket:IsShown() then slot.socket:Hide() end
-                else
-                    if not slot.socket:IsShown() then slot.socket:Show() end
-                end
             end
             if overlay:GetFrameLevel() ~= level + 3 then overlay:SetFrameLevel(level + 3) end
         end
         if DFRL.SetActionBarJewelryTop then
             local top = actionDefaults.topInset
             if DFRL.display.Get("equippedJewelry") and docked then
-                top = math.max(top, actionDefaults.jewelryTopInset)
+                -- Grow only the edit envelope; the rail and icon anchors stay put.
+                top = math.max(
+                    top,
+                    actionDefaults.jewelryTopInset,
+                    defaultScale * (RIM_SIZE * 20 / 36 + socketBounds / 2)
+                )
             end
             DFRL.SetActionBarJewelryTop(top)
         end
         Refresh()
-        PaintCooldowns()
         if SyncUpdates then SyncUpdates() end
         if DFRL.SetJewelryBarShown then DFRL.SetJewelryBarShown(docked and hud:IsVisible() and true or false) end
     end
     function DFRL.SetJewelryEditing(active)
         editing = active
+        if not editing then elapsed = INTERVAL end
         if editing then
             for _, slot in ipairs(slots) do
                 HideTooltip(slot)
@@ -817,9 +855,9 @@ DFRL:NewMod("Jewelry", 4, function()
         UpdateDisplay()
     end
     local detachedRegion = CreateFrame("Frame", nil, detached)
-    detachedRegion:SetWidth(socketSize + columnPitch * 4)
-    detachedRegion:SetHeight(socketSize)
-    detachedRegion:SetPoint("TOP", detached, "TOP", 0, -(46.5 - socketSize / 2))
+    detachedRegion:SetWidth(socketBounds + columnPitch * 4)
+    detachedRegion:SetHeight(socketBounds)
+    detachedRegion:SetPoint("TOP", detached, "TOP", 0, -(46.5 - socketBounds / 2))
     DFRL.layout.Register("jewelryBar", detached, function()
         local artTop = actionDefaults.bottom + actionDefaults.height + actionDefaults.topInset
         local bottom = (artTop + 4) / defaultScale - (HEIGHT - 46.5 - socketSize / 2)
@@ -832,20 +870,19 @@ DFRL:NewMod("Jewelry", 4, function()
     controller:RegisterEvent("PLAYER_LEAVING_WORLD")
     controller:RegisterEvent("PLAYER_LOGOUT")
     controller:RegisterEvent("UNIT_INVENTORY_CHANGED")
-    controller:RegisterEvent("BAG_UPDATE_COOLDOWN")
     controller:SetScript("OnEvent", function()
         if event == "PLAYER_LEAVING_WORLD" or event == "PLAYER_LOGOUT" then
             inWorld = false
-            elapsed, animationElapsed = 0, 0
+            elapsed = 0
             Clear()
         elseif event == "PLAYER_ENTERING_WORLD" then
             inWorld = true
-            elapsed, animationElapsed = 0, 0
+            elapsed = 0
             Clear()
+            PlaceSlots()
             Refresh()
-            PaintCooldowns()
-        elseif event ~= "UNIT_INVENTORY_CHANGED" or arg1 == "player" then
-            if event == "UNIT_INVENTORY_CHANGED" then InvalidateEffects() end
+        elseif arg1 == "player" then
+            InvalidateEffects()
             elapsed = INTERVAL
         end
     end)
@@ -855,20 +892,17 @@ DFRL:NewMod("Jewelry", 4, function()
             PlaceEffectTooltip(hoveredSlot)
         end
         elapsed = elapsed + arg1
-        animationElapsed = animationElapsed + arg1
         if elapsed >= INTERVAL then
             elapsed = 0
             Refresh()
-            animationElapsed = ANIMATION_INTERVAL
-        end
-        if animationElapsed >= ANIMATION_INTERVAL then
-            animationElapsed = 0
-            if cooldownsActive then PaintCooldowns() end
         end
     end
-    SyncUpdates = function() controller:SetScript("OnUpdate", CanPaint() and Tick or nil) end
+    SyncUpdates = function()
+        local visible = CanPaint()
+        controller:SetScript("OnUpdate", visible and Tick or nil)
+    end
     local function VisibilityChanged()
-        elapsed, animationElapsed = INTERVAL, ANIMATION_INTERVAL
+        elapsed = INTERVAL
         SyncUpdates()
     end
     DFRL.layout.ListenVisibility("actionBar", VisibilityChanged)

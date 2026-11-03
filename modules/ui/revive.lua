@@ -40,6 +40,7 @@ DFRL:NewMod("Revive", 4, function()
         root:SetFrameStrata("HIGH")
         root:EnableMouse(false)
         root:Hide()
+        root:SetScript("OnSizeChanged", function() view.animationWidth = nil end)
         local pill = CreateFrame("Frame", nil, root)
         pill:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", 4, 0)
         pill:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -52, 0)
@@ -57,8 +58,9 @@ DFRL:NewMod("Revive", 4, function()
         bar:SetPoint("RIGHT", pill, "RIGHT", -8, 0)
         bar:SetHeight(15)
         bar:SetMinMaxValues(0, 1)
-        bar:SetStatusBarTexture(path .. "FillWhite.blp")
-        bar:SetStatusBarColor(0.35, 0.76, 0.44, 1)
+        local fill = T.NewClippedFill(bar)
+        fill.SetTexture(path .. "FillWhite.blp")
+        fill.SetColor(0.35, 0.76, 0.44, 1)
         bar:SetValue(0)
         bar:EnableMouse(false)
         local overlay = CreateFrame("Frame", nil, pill)
@@ -72,22 +74,31 @@ DFRL:NewMod("Revive", 4, function()
         local center = Texture(overlay, "BorderCenter", "OVERLAY", 230, 31, 1, 31 / 32)
         center:SetPoint("LEFT", left, "RIGHT", 0, 0)
         center:SetPoint("RIGHT", right, "LEFT", 0, 0)
-        local spark = Texture(overlay, "Spark", "OVERLAY", 8, 32, 1, 1)
-        spark:SetBlendMode("ADD")
-        spark:Hide()
+        local spark, effectsReady
         local crosses = {}
-        for index = 1, CROSS_COUNT do
-            local cross = {}
-            for part = 1, 2 do
-                local texture = overlay:CreateTexture(nil, "ARTWORK")
-                texture:SetTexture("Interface\\Buttons\\WHITE8X8")
-                texture:SetWidth(part == 1 and 6 or 2)
-                texture:SetHeight(part == 1 and 2 or 6)
-                texture:SetBlendMode("ADD")
-                texture:Hide()
-                cross[part] = texture
+        local function PrepareEffects()
+            if effectsReady then return end
+            spark = spark or overlay:CreateTexture(nil, "OVERLAY")
+            spark:SetTexture(path .. "Spark.blp")
+            spark:SetWidth(8)
+            spark:SetHeight(32)
+            spark:SetTexCoord(0, 1, 0, 1)
+            spark:SetBlendMode("ADD")
+            spark:Hide()
+            for index = 1, CROSS_COUNT do
+                local cross = crosses[index] or {}
+                crosses[index] = cross
+                for part = 1, 2 do
+                    local texture = cross[part] or overlay:CreateTexture(nil, "ARTWORK")
+                    cross[part] = texture
+                    texture:SetTexture("Interface\\Buttons\\WHITE8X8")
+                    texture:SetWidth(part == 1 and 6 or 2)
+                    texture:SetHeight(part == 1 and 2 or 6)
+                    texture:SetBlendMode("ADD")
+                    texture:Hide()
+                end
             end
-            crosses[index] = cross
+            effectsReady = true
         end
         local function Label(size)
             local label = overlay:CreateFontString(nil, "OVERLAY")
@@ -115,6 +126,9 @@ DFRL:NewMod("Revive", 4, function()
         local dirty = true
         local measuredText, measuredFace, measuredSize, measuredFlags, measuredScale, measuredWidth
         local function Paint(width)
+            width = width or view.animationWidth or root:GetWidth()
+            fill.RefreshWidth(width - 72)
+            fill.SetFraction(value)
             if paintedValue ~= value then
                 bar:SetValue(value)
                 paintedValue = value
@@ -127,11 +141,12 @@ DFRL:NewMod("Revive", 4, function()
             displayedPercent = rounded
             T.SetTextIfChanged(percent, percentText)
             if performanceMode then
-                if spark:IsShown() then spark:Hide() end
+                if spark and spark:IsShown() then spark:Hide() end
                 dirty = false
                 return
             end
-            local x = 8 + ((width or root:GetWidth()) - 72) * value
+            PrepareEffects()
+            local x = 8 + (width - 72) * value
             if sparkX ~= x then
                 spark:ClearAllPoints()
                 spark:SetPoint("CENTER", pill, "LEFT", x, 0)
@@ -140,7 +155,7 @@ DFRL:NewMod("Revive", 4, function()
             if value > 0 and value < 1 then
                 if not spark:IsShown() then spark:Show() end
             else
-                if spark:IsShown() then spark:Hide() end
+                if spark and spark:IsShown() then spark:Hide() end
             end
             dirty = false
         end
@@ -150,8 +165,9 @@ DFRL:NewMod("Revive", 4, function()
             root:Hide()
             root:SetAlpha(1)
             bar:SetValue(0)
+            fill.SetFraction(0)
             paintedValue = 0
-            spark:Hide()
+            if spark then spark:Hide() end
             for _, cross in ipairs(crosses) do
                 cross.geometryWidth, cross.geometryRight = nil, nil
                 for _, texture in ipairs(cross) do
@@ -171,14 +187,16 @@ DFRL:NewMod("Revive", 4, function()
             pill:Hide()
             root:Show()
         end
-        function view.Resize() dirty = true end
+        function view.Resize()
+            view.animationWidth, dirty = nil, true
+        end
         function view.SetPerformance()
             transition, effectAge = 0, 0
             if performanceMode then
                 fade = 1
                 value, origin = target, target
                 if root:GetAlpha() ~= 1 then root:SetAlpha(1) end
-                if spark:IsShown() then spark:Hide() end
+                if spark and spark:IsShown() then spark:Hide() end
                 for _, cross in ipairs(crosses) do
                     for _, texture in ipairs(cross) do
                         if texture:IsShown() then texture:Hide() end
@@ -228,7 +246,7 @@ DFRL:NewMod("Revive", 4, function()
             if not T.NearlyEqual(width, root:GetWidth()) then
                 root:SetWidth(width)
                 if view.onResize then view.onResize() end
-                dirty = true
+                view.Resize()
             end
             if not T.NearlyEqual(caption:GetWidth(), width - 56) then caption:SetWidth(width - 56) end
             if fresh then
@@ -247,8 +265,9 @@ DFRL:NewMod("Revive", 4, function()
             if dirty then Paint() end
             if not requested then root:Show() end
         end
-        function view.Animate(elapsed)
-            if performanceMode or not view.active or not root:IsVisible() then return end
+        function view.Animate(elapsed, visibilityConfirmed)
+            if performanceMode or not view.active or (not visibilityConfirmed and not root:IsVisible()) then return end
+            PrepareEffects()
             if fade < 1 then
                 fade = math.min(1, fade + elapsed / FADE_TIME)
                 root:SetAlpha(1 - (1 - fade) * (1 - fade))
@@ -261,7 +280,11 @@ DFRL:NewMod("Revive", 4, function()
                 value = math.max(0, math.min(1, value + step))
                 dirty = true
             end
-            local width = root:GetWidth()
+            local width = view.animationWidth
+            if not width then
+                width = root:GetWidth()
+                if Number(width) and width > 0 then view.animationWidth = width end
+            end
             if dirty then Paint(width) end
             effectAge = effectAge + elapsed
             width = width - 72
@@ -360,6 +383,13 @@ DFRL:NewMod("Revive", 4, function()
             Clear()
             return
         end
+        -- The native contract permits an empty out-of-party result. Only that
+        -- and an explicit non-reviving state are accepted as idle publications.
+        if next(state) == nil or (state.down == 0 and state.reviving == "") then
+            Clear()
+            lastPacket, lastStamp, lastReceived, dirty = packet, stamp, received, false
+            return
+        end
         local template, person, progress, subject, waiting
         if state.down == 1 then
             local helper = Name(state.by)
@@ -386,18 +416,19 @@ DFRL:NewMod("Revive", 4, function()
         SyncNative()
     end
     local controller = CreateFrame("Frame")
-    local function Step(elapsed)
+    local function Step(elapsed, visibilityConfirmed)
         if age >= INTERVAL then
             age = 0
             Refresh()
         end
-        view.Animate(elapsed)
+        view.Animate(elapsed, visibilityConfirmed)
     end
     local function Tick()
         local elapsed = math.max(0, tonumber(arg1) or 0)
         age = age + elapsed
-        if age < INTERVAL and (performanceMode or not view.active or not root:IsVisible()) then return end
-        local ok, message = pcall(Step, elapsed)
+        local betweenReads = age < INTERVAL
+        if betweenReads and (performanceMode or not view.active or not root:IsVisible()) then return end
+        local ok, message = pcall(Step, elapsed, betweenReads)
         if not ok then
             Clear()
             controller:SetScript("OnUpdate", nil)
@@ -423,6 +454,7 @@ DFRL:NewMod("Revive", 4, function()
     })
     view.onResize = function() DFRL.layout.Place("revive", root) end
     root:SetScript("OnShow", function()
+        view.animationWidth = nil
         dirty, age = true, INTERVAL
         SyncNative()
     end)

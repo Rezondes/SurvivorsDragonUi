@@ -10,9 +10,13 @@ env.AZS_GetRunTime = function()
     return now
 end
 env.DFRL.navigation = {
+    Phase = env.AZS_GetPhase,
     IsRunPhase = function(value) return value == "playing" or value == "paused" or value == "choosing" end,
     MinimapLevel = function() return 11 end,
-    GuideDelta = function(entry) return entry.x, entry.y, nil, true end,
+    GuideDelta = function(entry, offsetsOnly)
+        assert(offsetsOnly, "minimap pin requested an unused distance")
+        return entry.x, entry.y, nil, true
+    end,
 }
 env.navigation = env.DFRL.navigation
 env.texturePath = "Interface\\AddOns\\SurvivorsDragonUi\\media\\tex\\waypoint\\"
@@ -128,8 +132,9 @@ Publish(65)
 Paint(true, 1)
 assert(label:GetText() == "1:05", "minute formatting changed")
 Publish(0)
+context:ResetCounts()
 Paint(true, 1)
-assert(label:GetText() == "0:00", "native due value invented a respawn")
+assert(label:GetText() == "0:00" and not context.reads.clock, "native zero needed a countdown clock")
 for _, left in ipairs({ -1, false, 0 / 0 }) do
     now = now + 1
     Publish(left)

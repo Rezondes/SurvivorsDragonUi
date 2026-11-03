@@ -71,18 +71,19 @@ the defaults above. Changing a choice does not move or scale the timer.
 ## Heroic level inside the bar
 
 The live timer shows the received Heroic rank as a Bildad Roman numeral centered
-vertically inside the pill, directly below the first visible attached affix's
-picture and gold opening. The numeral follows existing caption and affix
-placement when the row changes. With no visible attached affix, it uses
-**9.375%** of the fill width, the 1:30 point of a 16:00 zone. Normal runs have no numeral. The atlas
+vertically inside the pill. When both the run caption and boss countdown are
+visible, the numeral stays **9.375%** from the left edge of the fill track, the
+1:30 point of a 16:00 zone. With one or no captions, it sits below the first
+visible attached affix and uses the same percentage when no affix is available.
+Normal runs have no numeral. The atlas
 contains I–X, made only from I, V and X; unavailable, fractional or unsupported
 ranks hide the marker instead of displaying an old value. Tier colors move
 from bright blue through steel blue and copper to red. Ranks above V use the final red tint.
 
 One static, transparent BLP cell supplies each marker, including its dark
 outline. It stays visible in Performance Mode. Its horizontal center comes from
-the affix owner's existing placement geometry, with `fillWidth * 3 / 32` as
-the detached/hidden/empty/unready fallback. Very narrow bars keep the
+the affix owner's existing placement geometry when eligible. The percentage
+uses `fillWidth * 3 / 32`. Very narrow bars keep the
 complete 32-unit cell inside their caps. Proportional Layout scaling is
 inherited normally. A valid positive native zone duration is still required;
 it no longer determines the marker's horizontal coordinate. The existing timer
@@ -193,10 +194,16 @@ Enabling the mode hides any already-active layers immediately. Native progress
 continues in two-second steps; captions and informative markers remain.
 Turning the mode off restores effects from the current accepted rank and mode.
 
-Native duration and schedule validation reuse the existing ten-Hz/deferred
-publication refresh. Phase changes, run/schedule retirement and reload invalidate
-that cache. Raw run time, phase/rollback checks, clock HUD ownership and authored
-animation retain their existing frame cadence while the clock is visible.
+The reader samples elapsed time near the next whole native second and at the
+exact native zone limit. Native phase, run and visibility changes can request a
+fresh sample. The boss countdown follows changes to the rounded `AZS_RUN.nb`
+value. Both captions use native time through pauses and card selection.
+
+Native boss schedule and relevant run publications request a refresh on the next
+frame. The duration and schedule also have a one-second fallback. Phase and zone
+changes, Show and reload request fresh data. The shared tenth-second pass still
+updates encounter health, marker geometry, affixes and Heroic rank. Visible HUD
+ownership and animation keep their existing cadence.
 Boss debuffs read current native effects at ten Hz or a deferred publication;
 hovering samples phase/effects immediately before opening the tooltip. Removed
 slots clear before opening and changed debuff height reflows at that point.
@@ -276,9 +283,25 @@ The Run timer and Boss health Layout outlines have left/right center handles for
 
 The run fill uses `runBar.layoutWidth`, derived from the actual root width minus its original sixteen-unit inset. Every scheduled skull uses `width * nativeSpawnTime / nativeRunLength`; the final skull stays at the fill's right edge. Width is part of the marker cache key. Native health, boss state and native time still own the values and marker state. Native StatusBar UV writes remain untouched.
 
-The existing 27 flow regions retain their speed, lane, phase and update interval; their spacing and wrap span reflow to the new width. Blue foam clips against the resized native progress boundary. The 28 red glints redistribute across that width only on a width transition, preserving pulse periods, phases, alpha and authored artwork. A wider bar does not allocate additional effects or alter native timing. Hidden views defer this cosmetic reflow until visible.
+The existing 27 flow regions retain their speed, lane and phase, with spacing and wrap span reflowing to the new width. Foam and tier glints follow the filled portion. Ordinary forward steps update the fill immediately and let the effects catch up on the next eligible 20 Hz sample. Shrink, resize and completion reclip immediately. Pulse periods, colors and artwork stay the same, and wider bars reuse the existing pool. Hidden views defer cosmetic reflow until visible.
 
 Boss health also has top/bottom handles for 1–40 viewport slots, with mouse-wheel access to further validated native entries. The `bossRows` display preference defaults to zero (automatic full list), copied by profiles and restored on resets. Full encounter validation and native HUD ownership remain intact. Visible health rows use the current group width, preserve end caps and text size, and wrap their eighteen-unit debuffs into the available columns. Debuff height remains part of the measured outline. No data, health value or boss is fabricated to fill empty viewport slots.
+
+**Combine boss bars** in `/sdui` → **Encounters** → **Boss bars** is off by
+default. On places every current boss beside the others in one row, sharing the
+group's existing width equally: halves for two, thirds for three, and so on.
+Enabled guardian bars share that row too. Each bar keeps its own name, health,
+debuffs and loss effect; one remaining bar uses the full width. Names and health
+captions stay inside their own segment, so narrow segments can truncate text.
+Debuffs hide when a segment cannot fit one full-size icon. Widen Boss health in
+Layout for more room.
+
+Combined mode ignores the saved vertical row limit, height dragging and wheel
+scrolling. Turning it off restores the saved stacked viewport. The shared
+outline includes the deepest debuff column. `bossCombineBars` uses the existing
+display preview, Confirm, Cancel/discard, profiles and reset lifecycle; missing
+or invalid values select off. Both Performance Mode states use the same instant
+layout, retaining their existing loss-effect behavior.
 
 Source inspection and pinned formatting do not establish animation appearance, input behavior, native rendering or FPS in the packaged client. No local tests or game execution were run.
 

@@ -29,9 +29,17 @@ def main():
             "FormatCooldown", "UpdateCooldownNumber", "CreateCooldownNumbers",
         ])
         jewelry_cache = extract_source("modules/ui/jewelry.lua", [
-            "InvalidateEffects", "ReadEffects", "ClearSlot", "PaintIcons",
+            "ICON_SIZE", "ICON_ART_SIZE", "ICON_ZOOM", "iconSpan", "iconInset", "PrepareIconParts", "Number",
+            "InvalidateEffects", "ReadEffects", "SetPlaceholderShown", "ClearSlot", "PaintIcons",
+            "Clear", "Refresh",
         ])
-        jewelry_cache = jewelry_cache.rsplit("\nreturn ", 1)[0] + "\nreturn { InvalidateEffects = InvalidateEffects, ReadEffects = ReadEffects, ClearSlot = ClearSlot, PaintIcons = PaintIcons }\n"
+        jewelry_cache = jewelry_cache.rsplit("\nreturn ", 1)[0] + "\nreturn { InvalidateEffects = InvalidateEffects, ReadEffects = ReadEffects, ClearSlot = ClearSlot, PaintIcons = PaintIcons, PrepareIconParts = PrepareIconParts, Clear = Clear, Refresh = Refresh }\n"
+        jewelry_rarity = extract_source("modules/ui/jewelry.lua", [
+            "Number", "PaintCarving", "UpdateRarity", "SetQuality", "UpdateQuality",
+            "SetPlaceholderShown", "ClearSlot",
+        ])
+        jewelry_rarity = jewelry_rarity.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = UpdateRarity, Quality = UpdateQuality, Clear = ClearSlot }\n"
+        jewelry_order = extract_source("modules/ui/jewelry.lua", ["PlaceSlots"])
         run_hud = "local render, refreshRows, scheduleCache = {}, false, nil\n" + extract_source("modules/ui/run.lua", [
             "nativeParts", "TakeOver", "Restore", "SyncReplacements",
         ])
@@ -44,7 +52,7 @@ def main():
             "HideGuardianTimer", "UpdateGuardianTimer", "RecyclePins", "MakeMinimapPin", "PlacePin",
             "Offset", "DrawTrackedPin", "UpdateTrackerPins",
         ])
-        guardian_placement = "local tooltip, root = GameTooltip, tooltipRoot\nlocal inWorld, editing = true, false\nlocal lastIconOwner, lastIconIsDetail\nlocal nativeScale = tooltip:GetScale()\n" + extract_source("core/tooltips.lua", [
+        guardian_placement = "local tooltip, root = GameTooltip, tooltipRoot\nlocal inWorld, editing = true, false\nlocal lastIconOwner, lastIconIsDetail\nlocal ownerMiss, iconRegistryRevision = {}, 0\nlocal nativeScale = tooltip:GetScale()\n" + extract_source("core/tooltips.lua", [
             "IconOwner", "PlaceTooltip",
         ])
         border_modes = "local resourcesShown, appliedDelta\n" + extract_source("modules/unit/mini.lua", ["UpdateResources"])
@@ -54,16 +62,25 @@ def main():
         navigation_distance = extract_source("modules/map/waypoints.lua", ["UpdateDistance"])
         waypoint_frame = extract_source("modules/map/waypoints.lua", [
             "NEAREST_INTERVAL", "nearestClock", "guideRespawns", "Number", "FrameVisible",
-            "RespawnTarget", "CanSelectNearest", "Choose", "Rotate", "WrapAngle", "Blend", "UpdateGuide",
+            "WipeSnapshotTable", "RespawnTarget", "CanSelectNearest", "Choose", "Rotate", "WrapAngle", "Blend", "UpdateGuide",
         ])
+        waypoint_buffers = extract_source("modules/map/waypoints.lua", [
+            "Number", "Integer", "WipeSnapshotTable", "ClearSnapshotBuffer", "RejectSnapshot", "SnapshotRow", "Snapshot",
+        ])
+        waypoint_buffers = waypoint_buffers.rsplit("\nreturn ", 1)[0] + "\nreturn { Read = Snapshot, Clear = ClearSnapshotBuffer }\n"
+        fstack_display = extract_source("core/fstack.lua", ["Number", "Read", "Place", "LineHeight", "Display"])
+        gold_glow = extract_source("modules/ui/run.lua", ["RefreshTallyGlowBounds", "CreateGoldGlow", "SetGoldHighlight"])
+        gold_glow = gold_glow.rsplit("\nreturn ", 1)[0] + "\nreturn { New = CreateGoldGlow, Set = SetGoldHighlight }\n"
         xp_glow = extract_source("modules/xprep/xprep.lua", ["PaintGlow"])
         sct_queue = extract_source("modules/nameplates/sct.lua", [
             "DIABLO", "criticalHistory", "textStyle",
-            "FALLBACK_ICON", "EVENT_SETTLE", "EVENT_FALLBACK_DELAY", "PERFORMANCE_GROUP_WINDOW", "groupWindow", "DAMAGE_COLORS",
+            "FALLBACK_ICON", "EVENT_SETTLE", "EVENT_FALLBACK_DELAY", "PERFORMANCE_GROUP_WINDOW", "RECENT_PLATE_TIME", "grouping", "DAMAGE_COLORS",
             "DAMAGE_SAMPLE_LIMIT", "DAMAGE_SAMPLE_TIME", "DAMAGE_SAMPLE_MINIMUM", "STRONG_DAMAGE_RATIO",
-            "IsFiniteNumber", "TextureKey", "IconIdentityPart", "AreaDamage", "DamageColor", "SyncGroupWindow", "LargeCritical", "QueueCombatText", "UpdatePending", "HandleCombatEvent",
+            "IsFiniteNumber", "TextureKey", "IconIdentityPart", "AreaDamage", "DamageColor", "SyncGroupWindow", "LargeCritical",
+            "AddGroupPart", "QueueCombatText", "GroupTotals", "AddGroupTarget", "SelectGroupParts", "MergeGroupPart", "DisplayGroup",
+            "NearbyGroupOrigins", "DisplayGroupedTargets", "UpdatePending", "HandleCombatEvent",
         ])
-        sct_queue = sct_queue.rsplit("\nreturn ", 1)[0] + "\nreturn { Queue = QueueCombatText, Update = UpdatePending, Handle = HandleCombatEvent, SyncWindow = SyncGroupWindow }\n"
+        sct_queue = sct_queue.rsplit("\nreturn ", 1)[0] + "\nSyncGroupWindow()\nreturn { Queue = QueueCombatText, Update = UpdatePending, Handle = HandleCombatEvent, SyncWindow = SyncGroupWindow }\n"
         run_foam = extract_source("modules/ui/run.lua", ["DrawFoam", "UpdateBlueFoam"])
         run_static = extract_source("modules/ui/run.lua", [
             "IsNumber", "RUN_TIER_STYLES", "RunTier", "ApplyRunFill",
@@ -94,12 +111,13 @@ def main():
         ])
         settings_editor = settings_editor.rsplit("\nreturn ", 1)[0] + "\nreturn { Create = CreateFontEditor, Display = UpdateDisplayLabels, SCT = UpdateSctLabels, Font = RefreshFontControls, Clock = UpdateClockCaptions }\n"
         tally_counters = extract_source("modules/ui/run.lua", [
-            "TALLY_COUNTER_INTERVAL", "IsNumber", "TallyCountersDue", "ClearTally", "UpdateTally", "UpdateRunBoundary",
+            "TALLY_COUNTER_INTERVAL", "IsNumber", "PaintTallyValue", "TallyCountersDue", "AdvanceTallyCounters", "ClearTally", "UpdateTally", "UpdateRunBoundary",
         ])
-        tally_counters = tally_counters.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = UpdateTally, Clear = ClearTally, Boundary = UpdateRunBoundary }\n"
+        tally_counters = tally_counters.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = UpdateTally, Advance = AdvanceTallyCounters, Clear = ClearTally, Boundary = UpdateRunBoundary, Paint = PaintTallyValue }\n"
         minimap_clock = extract_source("modules/map/map.lua", ["WatchClock", "SetLauncherEditing"])
         minimap_clock = minimap_clock.rsplit("\nreturn ", 1)[0] + "\nreturn { Watch = WatchClock, Editing = SetLauncherEditing }\n"
-        player_pulse = extract_source("modules/unit/player.lua", ["CreatePulse"])
+        player_status = extract_source("modules/unit/player.lua", ["CreateRestingIcon", "UpdatePortraitShape"])
+        player_status = player_status.rsplit("\nreturn ", 1)[0] + "\nreturn { Resting = CreateRestingIcon, Shape = UpdatePortraitShape }\n"
         aura_layout = extract_source("modules/unit/auras.lua", ["PlaceNativeFrame", "Layout"])
         pet_captions = extract_source("modules/unit/pets.lua", ["Number", "Time", "TimerText", "CountText", "HideRow"])
         pet_captions = pet_captions.rsplit("\nreturn ", 1)[0] + "\nreturn { Timer = TimerText, Count = CountText, Hide = HideRow }\n"
@@ -109,18 +127,25 @@ def main():
             "HOLD", "FADE", "SLIDE", "AtBottom", "FadeSettings", "Rearm", "Reveal", "PositionNative", "NoticeMessage",
         ])
         run_markers = extract_source("modules/ui/run.lua", [
-            "MARKER_SIZE", "ACTIVE_GLOW_PERIOD", "ACTIVE_GLOW_MIN_ALPHA", "ACTIVE_GLOW_MAX_ALPHA",
-            "ACTIVE_GLOW_MIN_OFFSET", "ACTIVE_GLOW_MAX_OFFSET", "ShowMarkerGlow", "HideMarkerTooltip",
+            "SKULL_ICON", "MARKER_SIZE", "ACTIVE_GLOW_PERIOD", "ACTIVE_GLOW_MIN_ALPHA", "ACTIVE_GLOW_MAX_ALPHA",
+            "ACTIVE_GLOW_MIN_OFFSET", "ACTIVE_GLOW_MAX_OFFSET", "ACTIVE_GLOW_DIAGONAL_FACTOR", "PrepareMarkerGlow",
+            "ShowMarkerGlow", "HideMarkerTooltip",
             "HideMarker", "UpdateMarkerStates",
         ])
         run_markers = run_markers.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = UpdateMarkerStates, Hide = HideMarker }\n"
         run_debuff_cadence = extract_source("modules/ui/run.lua", [
-            "IsNumber", "HideDebuff", "Permanent", "DebuffRemaining", "DebuffIcon", "UpdateDebuffs",
+            "IsNumber", "HideDebuff", "ClearDebuffs", "Permanent", "DebuffRemaining", "DebuffIcon", "UpdateDebuffs",
             "ReflowRows", "RefreshDebuffHover", "UpdateDebuffRows", "Update",
         ])
-        run_debuff_cadence = run_debuff_cadence.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = Update, Rows = UpdateDebuffRows }\n"
-        run_boss_health_loss = extract_source("modules/ui/run.lua", ["CreateBossHealthLoss", "Retire", "UpdateRows"])
-        run_boss_health_loss = run_boss_health_loss.rsplit("\nreturn ", 1)[0] + "\nreturn { New = CreateBossHealthLoss, Rows = UpdateRows, Retire = Retire }\n"
+        run_debuff_cadence = run_debuff_cadence.rsplit("\nreturn ", 1)[0] + "\nreturn { Update = Update, Rows = UpdateDebuffRows, Clear = ClearDebuffs }\n"
+        run_boss_health_loss = extract_source("modules/ui/run.lua", ["Texture", "Pill", "CreateBossHealthLoss", "Retire", "ReflowRows", "UpdateRows"])
+        # Keep getter validation separate from the row tests' fake native feed.
+        encounter_rows = extract_source("modules/ui/run.lua", ["EncounterRows"])
+        run_boss_health_loss = (
+            run_boss_health_loss.rsplit("\nreturn ", 1)[0] + "\n"
+            + encounter_rows.rsplit("\nreturn ", 1)[0]
+            + "\nreturn { New = CreateBossHealthLoss, Pill = Pill, Rows = UpdateRows, Retire = Retire, Reflow = ReflowRows, Encounters = EncounterRows }\n"
+        )
     except RuntimeError as error:
         print(error, file=sys.stderr)
         return 1
@@ -141,6 +166,9 @@ def main():
             ("run-hud-source.lua", run_hud, "ui_shared_rules_spec.lua"),
             ("cooldown-source.lua", cooldown, "ui_spec.lua"),
             ("jewelry-cache-source.lua", jewelry_cache, "ui_jewelry_cache_spec.lua"),
+            ("jewelry-visibility-source.lua", jewelry_cache, "ui_jewelry_visibility_spec.lua"),
+            ("jewelry-rarity-source.lua", jewelry_rarity, "ui_jewelry_rarity_spec.lua"),
+            ("jewelry-order-source.lua", jewelry_order, "ui_jewelry_order_spec.lua"),
             ("guardian-hover-source.lua", guardian_hover, "ui_guardian_hover_spec.lua"),
             ("guardian-timers-source.lua", guardian_timers, "ui_guardian_timer_spec.lua"),
             ("border-modes-source.lua", border_modes, "ui_border_spec.lua"),
@@ -148,6 +176,7 @@ def main():
             ("navigation-distance-source.lua", navigation_distance, "ui_navigation_distance_spec.lua"),
             ("waypoint-frame-source.lua", waypoint_frame, "ui_waypoint_frame_perf_spec.lua"),
             ("xp-glow-source.lua", xp_glow, "ui_xp_perf_spec.lua"),
+            ("gold-glow-source.lua", gold_glow, "ui_gold_glow_perf_spec.lua"),
             ("sct-queue-source.lua", sct_queue, "ui_sct_queue_perf_spec.lua"),
             ("run-foam-source.lua", run_foam, "ui_run_foam_perf_spec.lua"),
             ("run-static-source.lua", run_static, "ui_run_static_mode_spec.lua"),
@@ -157,7 +186,7 @@ def main():
             ("run-captions-source.lua", run_captions, "ui_run_captions_perf_spec.lua"),
             ("tally-counters-source.lua", tally_counters, "ui_tally_counter_cadence_spec.lua"),
             ("minimap-clock-source.lua", minimap_clock, "ui_idle_clock_spec.lua"),
-            ("player-pulse-source.lua", player_pulse, "ui_player_pulse_perf_spec.lua"),
+            ("player-status-source.lua", player_status, "ui_player_status_spec.lua"),
             ("aura-layout-source.lua", aura_layout, "ui_aura_layout_perf_spec.lua"),
             ("pet-captions-source.lua", pet_captions, "ui_pet_caption_perf_spec.lua"),
             ("chat-idle-source.lua", chat_idle, "ui_chat_idle_perf_spec.lua"),
@@ -166,6 +195,8 @@ def main():
             ("run-marker-source.lua", run_markers, "ui_run_marker_perf_spec.lua"),
             ("run-debuff-cadence-source.lua", run_debuff_cadence, "ui_run_debuff_cadence_spec.lua"),
             ("run-boss-health-loss-source.lua", run_boss_health_loss, "ui_run_boss_health_loss_spec.lua"),
+            ("waypoint-buffers-source.lua", waypoint_buffers, "ui_waypoint_buffers_spec.lua"),
+            ("fstack-display-source.lua", fstack_display, "ui_fstack_display_spec.lua"),
         ):
             seam = Path(folder) / name
             seam.write_text(source, encoding="utf-8")
@@ -178,7 +209,7 @@ def main():
                     source_file.write_text(body, encoding="utf-8")
                     command.append(str(source_file))
             run_fixture(command, fixture)
-        for fixture in ("ui_menu_native_spec.lua", "ui_dropdown_compat_spec.lua", "ui_artwork_strip_spec.lua", "ui_fonts_spec.lua", "ui_retail_edit_spec.lua", "ui_retail_layout_spec.lua", "ui_default_chat_spec.lua", "ui_health_spec.lua", "ui_player_absorb_spec.lua", "ui_mini_health_spec.lua", "ui_sct_spec.lua", "ui_sct_areas_spec.lua", "ui_native_sct_api_spec.lua", "ui_nameplates_spec.lua", "ui_marks_spec.lua", "ui_meter_party_spec.lua", "ui_native_meter_api_spec.lua", "ui_native_meter_view_spec.lua", "ui_native_portrait_circle_spec.lua", "ui_native_language_spec.lua", "ui_live_position_api_spec.lua", "ui_downed_party_api_spec.lua", "ui_world_marker_api_spec.lua", "ui_party_waypoint_spec.lua", "ui_banners_perf_spec.lua", "ui_layout_spec.lua", "ui_pets_totems_spec.lua", "ui_guardian_tracker_perf_spec.lua", "ui_revive_perf_spec.lua", "ui_core_idle_cadence_spec.lua", "ui_cooldown_lifecycle_spec.lua", "ui_default_action_bar_spec.lua", "ui_tooltip_style_perf_spec.lua", "ui_target_color_perf_spec.lua", "ui_target_classification_spec.lua", "ui_passive_cadence_spec.lua", "ui_projection_cache_perf_spec.lua", "ui_sct_metadata_perf_spec.lua"):
+        for fixture in ("ui_3d_portraits_spec.lua", "ui_menu_native_spec.lua", "ui_dropdown_compat_spec.lua", "ui_artwork_strip_spec.lua", "ui_fonts_spec.lua", "ui_retail_edit_spec.lua", "ui_retail_layout_spec.lua", "ui_default_chat_spec.lua", "ui_health_spec.lua", "ui_player_absorb_spec.lua", "ui_mini_health_spec.lua", "ui_sct_spec.lua", "ui_sct_areas_spec.lua", "ui_native_sct_api_spec.lua", "ui_nameplates_spec.lua", "ui_marks_spec.lua", "ui_meter_party_spec.lua", "ui_native_meter_api_spec.lua", "ui_native_meter_view_spec.lua", "ui_native_portrait_circle_spec.lua", "ui_native_language_spec.lua", "ui_live_position_api_spec.lua", "ui_downed_party_api_spec.lua", "ui_world_marker_api_spec.lua", "ui_party_waypoint_spec.lua", "ui_banners_perf_spec.lua", "ui_layout_spec.lua", "ui_pets_totems_spec.lua", "ui_guardian_tracker_perf_spec.lua", "ui_revive_perf_spec.lua", "ui_core_idle_cadence_spec.lua", "ui_cooldown_lifecycle_spec.lua", "ui_default_action_bar_spec.lua", "ui_tooltip_style_perf_spec.lua", "ui_target_color_perf_spec.lua", "ui_target_classification_spec.lua", "ui_passive_cadence_spec.lua", "ui_projection_cache_perf_spec.lua", "ui_sct_metadata_perf_spec.lua"):
             run_fixture(["lua5.1", "scripts/tests/fixtures/" + fixture], fixture)
     if failures:
         print("Failed UI fixtures:", file=sys.stderr)

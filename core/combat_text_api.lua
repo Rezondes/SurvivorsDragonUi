@@ -46,15 +46,14 @@ function DFRL.tools.NewCombatTextApi()
     end
     local function Array(value, limit)
         if type(value) ~= "table" then return end
-        local count = 0
+        local count, lastIndex = 0, 0
         for key in pairs(value) do
             if not Integer(key, 1, limit) then return end
             count = count + 1
+            if key > lastIndex then lastIndex = key end
         end
-        for index = 1, count do
-            if value[index] == nil then return end
-        end
-        return count
+        -- Unique positive integer keys are dense exactly when the largest key equals the count.
+        if lastIndex == count then return count end
     end
     local function Part(value)
         value = value or ""
@@ -214,6 +213,9 @@ function DFRL.tools.NewCombatTextApi()
         elseif damageType == "autoattack" then
             attack = "attack:" .. value.damageType
         end
+        local attackIdentity = Part(value.sourceId or value.eventId)
+            .. Part(value.sourceKind)
+            .. Part(attack or value.eventId)
         return {
             kind = value.kind,
             amount = value.amount,
@@ -230,9 +232,8 @@ function DFRL.tools.NewCombatTextApi()
             critical = value.critical,
             iconTexture = value.icon,
             nativeAttack = attack,
-            nativeIdentity = Part(value.sourceId or value.eventId) .. Part(value.sourceKind) .. Part(
-                value.targetId or value.eventId
-            ) .. Part(attack or value.eventId) .. Part(meterSourceKey or ""),
+            nativeAttackIdentity = attackIdentity,
+            nativeIdentity = attackIdentity .. Part(value.targetId or value.eventId) .. Part(meterSourceKey or ""),
             nativeEventId = value.eventId,
             nativeTime = value.presentedAt,
             nativeOrigin = value.anchorStatus == "ready" and {
@@ -267,7 +268,11 @@ function DFRL.tools.NewCombatTextApi()
             Retry(now)
             return nil, true
         end
-        local events, seen, previous = {}, {}, state.presentedAt
+        local events, seen
+        if count > 0 then
+            events, seen = {}, {}
+        end
+        local previous = state.presentedAt
         for index = 1, count do
             local event = Event(value.events[index], value.clockSeconds)
             if
@@ -290,8 +295,10 @@ function DFRL.tools.NewCombatTextApi()
                 table.insert(events, event)
             end
         end
+        -- An empty batch can still prime or advance the cursor and clock.
         state.cursor, state.streamId, state.worldId = value.cursor, value.streamId, value.worldId
         state.clock, state.presentedAt = value.clockSeconds, previous
+        if not seen then return end
         for id in pairs(seen) do
             state.slot = math.mod(state.slot, 4096) + 1
             local old = state.order[state.slot]
@@ -324,15 +331,15 @@ function DFRL.tools.NewCombatTextApi()
             and value.y == nil
             and (value.state ~= "expired" or value.reason == "age" or value.reason == "resourceLimit")
     end
-    function adapter.Project(texts, now, scaleByDistance, referenceDistance, minimumPercent)
+    function adapter.Project(items, now, scaleByDistance, referenceDistance, minimumPercent, forGrouping)
         if not state.selected then return true end
-        local count = table.getn(texts)
+        local count = table.getn(items)
         if count == 0 or not state.cursor then return true end
         local ids, origins, sample, clock = state.ids, state.origins, nil, nil
         local size, failed = 0, false
         -- Hide old projections before any native call, including a thrown call.
         for index = 1, count do
-            local origin = texts[index].origin
+            local origin = forGrouping and items[index] or items[index].origin
             if origin and origin.native then origin.visible = false end
         end
         local function Flush()
@@ -366,6 +373,9 @@ function DFRL.tools.NewCombatTextApi()
                 local point, origin = value.entries[index], origins[index]
                 if point.state == "onScreen" then
                     origin.x, origin.y, origin.visible = point.x, point.y, true
+                    if forGrouping then
+                        origin.cameraDepth, origin.unitsPerYard = point.cameraDepth, point.uiUnitsPerYard
+                    end
                     -- Camera metrics never substitute for distance from the hero.
                     local distance = state.playerDistanceMetrics and point.playerDistance
                     local factor = 1
@@ -383,8 +393,9 @@ function DFRL.tools.NewCombatTextApi()
             table.setn(ids, 0)
         end
         for index = 1, count do
-            local origin = texts[index].origin
-            if origin and origin.native and not failed and now - texts[index].started < texts[index].duration then
+            local item = items[index]
+            local origin = forGrouping and item or item.origin
+            if origin and origin.native and not failed and (forGrouping or now - item.started < item.duration) then
                 size = size + 1
                 ids[size], origins[size] = origin.anchorId, origin
                 if size == state.projectLimit then Flush() end
@@ -393,7 +404,7 @@ function DFRL.tools.NewCombatTextApi()
         Flush()
         if failed then
             for index = 1, count do
-                local origin = texts[index].origin
+                local origin = forGrouping and items[index] or items[index].origin
                 if origin and origin.native then origin.visible = false end
             end
             Retry(now)

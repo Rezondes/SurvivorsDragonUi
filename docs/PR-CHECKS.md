@@ -38,6 +38,23 @@ kits retain the legacy fallback. Both Performance Mode states share these cases.
 These are CI-only ownership/input-boundary checks. They do not execute client
 code or prove actual native hit testing, AS settings behavior or run preservation.
 
+Dropdown error-filter cases keep the production error handler and popup guard.
+They cover the exact reported file/line/global/nil-concatenation diagnostic,
+slash/quote variants, pre-addon popups, retained native Show calls and unchanged
+chat throttling for other errors. Near matches, prefixed/appended messages,
+previous/later OnShow ownership, repeated addon loads and missing native
+dropdown/popup boundaries remain covered. These are CI-only cases; no local
+tests, standalone validation or addon/game execution were run. Native popup
+timing remains unverified.
+
+Stored-level Artisan cases cover all five source strips, fixed corners and
+central crests, caption-width fitting, eight static texture regions, region
+reuse and unchanged idle writes. Both Performance Mode states retain the same
+panel, class-icon rim and count through Hide/Show and mode changes, with no
+cosmetic updater, pulse-only hover handlers or halo/highlight allocation. They use
+the existing complete-controller fixture, remain CI-only and do not establish
+native filtering, text metrics or artwork appearance.
+
 Stored-level cases keep `UnitClass("player")` fixed to a different character
 while changing received run classes. They cover Warlock-to-Hunter switching,
 next-frame zone receipt, missing/malformed metadata, unchanged crop writes,
@@ -98,11 +115,90 @@ An explicit Bash shell enables `pipefail`, so piping fixture/model output into
 
 ## UI work and cleanup tests
 
+The second shared pass covers unchanged debuff stack/countdown formatting with
+fresh timing and exact minute/second transitions; event-satisfied banner service
+checks with the original fallback; tooltip lookup misses and registry/list/owner
+invalidation; reuse of measured guardian captions after filtering; and periodic
+chat layout repair limited to the selected pane and visible input. Both modes
+retain native text/geometry repair, timing, hidden/world cleanup and existing
+pools. Chat cases also keep immediate native-window and Show recovery alongside
+message coalescing, wheel history and native expiry. These are CI-only cases,
+authored without local execution, and do not prove client appearance or FPS.
+
+The first shared cadence pass covers jewelry's changed-only rarity preparation
+and empty-slot cleanup while retaining five-Hz inventory retries;
+guardian snapshot-copy and revision-filter reuse with fresh native health and
+countdowns; unchanged gameplay Layout bypass with unannounced viewport recovery;
+shared stored-level scale sampling; and unchanged tally integer formatting in
+both modes. Existing fixtures retain native handoff, hidden/world cleanup,
+pool reuse and kills/gold deadlines in both modes. These cases
+are authored for CI only and were not executed locally. They do not establish
+native publication timing, appearance or measured FPS improvement.
+
+Boss-row cases cover equal halves/thirds/quarters and larger counts, one/zero
+boss recovery, group resizing, native order and row reuse, independent health
+and loss effects, deepest debuff bounds, stacked viewport restoration and
+hidden deferral in both Performance Mode states. Display/editor cases cover
+the default-off Combine boss bars choice, normalization, preview, Confirm,
+Cancel, profile copies, reset and the custom-boss master dependency. These are
+authored for CI only; no local tests, standalone validation or game execution
+are authorized. They do not establish native text clipping or appearance.
+
+Shared settings-dropdown cases retain the real editor factory and exercise
+Layout font/outline, Combat outgoing/style/font, meter colors, tally styles,
+timer outline, map visibility, loot modes and jewelry. They cover the shared
+lazy popup, longest-list reuse, selected captions, disabled input, independent
+native SCT/font transactions and owner/hide/Cancel cleanup. Loot remains
+selectable in Game/Off, with only its dependent controls disabled. These cases
+are CI-only; no local tests or addon/game execution are authorized.
+
+Jewelry order cases load the production Display owner and extract the actual
+placement helper. They cover default-off behavior, permutation validation,
+atomic swaps, unchanged native slot identities, changed-only anchors,
+disabled/world-hidden deferral, Confirm/Cancel, profile copies and reset.
+Editor cases cover the dedicated Jewelry category, five dropdown selectors,
+attachment/master dependencies, swap feedback, search metadata, lazy popup
+reuse, selection/outside-click/page-hide/disable/Cancel cleanup and
+ten sidebar rows staying above the footer. Coverage is authored for CI only;
+no local tests or addon/game execution are authorized.
+
+Jewelry geometry cases also extract the production preparation function to
+require both top/bottom caps, continuous complete selected vertical UV coverage,
+the unchanged 5% source zoom and a centered artwork box at the selected icon size. Compositor cases
+retain inset band heights through pooling. These cases are CI-only and do not
+establish native pixel coverage.
+
+Jewelry rail asset cases require clear pixels above the original straight
+upper strip, clear item openings, retained bottom-arch/bar pixels and exclusion of the
+retired detached-circle file from the runtime manifest. Existing strip cases
+retain both neighbour pixels at every join. The upper connector sits beneath
+solid housing pixels; both former crop-tab bands remain clear across all five
+sockets. These are CI-only data cases;
+local work is artwork preparation, source review and pinned formatting, with
+no local tests, standalone validation or addon/game execution.
+
+Jewelry rarity cases extract the production quality, artwork and retirement
+helpers. They cover ranks 0–5, the shared silver crop, neutral fallback, raw tooltip RGB, changed-only
+bindings and UVs, mode parity, failed binding retries and hidden slot recovery.
+Attachment changes repaint the same rarity with the correct crop and defer
+that work while hidden.
+The fake native boundary rejects extra overlay allocation. Asset cases pin
+the authoring SHA-256 and neutral crop and inspect the five gem and halo cells,
+their clear opening and a shared solid metal pixel. Attached crops clear the
+halo at both arch joins while preserving upper glow and opaque metal. These
+cases run in CI only.
+
 Jewelry cache cases use the exact production reader/cache/compositor functions
 over fake native tooltip and texture boundaries. They cover unchanged successful
 reads, same-icon item replacement, inventory/language invalidation, missing or
 throwing links/items, empty-row retries, slot retirement and reusable grouping
-records/regions with unchanged supplied crops. Pet-controller cases cover
+records/regions with unchanged supplied crops. Jewelry visibility cases exercise
+the production refresh and retirement in both Performance Mode states. Settled
+occupied and empty slots make no placeholder visibility writes while native
+reads and failed-inventory retries continue. Empty pictures change only on the
+final native inventory state. Hidden recovery, missing player, world
+leave and disable retire/recover the existing regions without changing artwork,
+color, alpha or geometry. Pet-controller cases cover
 Layout-hidden sleep, deferred SCT icon learning, choice/run recovery and fresh
 Show data. Meter-controller cases cover zero view construction before first
 enable, immediate preview, disabled Reset and reuse after toggling, in both
@@ -324,9 +420,13 @@ preservation, synchronous synthetic release, real WorldFrame/plate release,
 death/reuse during a hold, hidden/filtered plates, pre-existing/external camera
 ownership and world/logout/reload cleanup in both Performance Mode states.
 Reentrant world hiding, unnotified native stops and partially failed starts
-clear or replace owned state without sticking later presses.
-Missing APIs retain native interaction; repeated discovery and idle updates add
-no hooks or drawing work. These cases remain CI-only and were not run locally.
+clear or replace owned state without sticking later presses. A physical release
+that bypasses both hooks stops the owned camera on the next update without a
+click, including after a long hold and plate retirement. A missing or failing
+button read cannot start a hold; a read failure during a hold retires it. Idle
+updates and foreign mouse-look do not read the physical button. Missing APIs
+retain native interaction; repeated discovery adds no hooks or drawing work.
+These cases remain CI-only and were not run locally.
 
 Meter spacing cases use the production meter with explicit native text metrics.
 They cover reclaiming unused numeric space, caption-aware metric caching and
@@ -337,7 +437,7 @@ preview/Confirm/discard/profiles/resets and searchable controls. These cases
 remain CI-only and were not run locally; native glyph fit is unverified.
 
 The editor fixture covers the single sidebar search above Performance Mode,
-compact caption/input geometry, all nine category rows staying clear of the footer,
+compact caption/input geometry, all ten category rows staying clear of the footer,
 the recovered full content viewport and result geometry remaining in that
 viewport. Category changes reuse the same header and preserve draft/scroll
 behavior. It also covers metadata search without constructing unopened pages,
@@ -495,7 +595,7 @@ The assertions cover:
   The same fixture loads the AST-extracted production settings constructor with
   the actual locale/Display/Profiles owners and explicit native font/HUD
   boundaries. It covers shell-only construction, selected-page preparation, all
-  nine categories/twenty sections, current defaults, preview/Confirm/discard,
+  ten categories/twenty-two sections, current defaults, preview/Confirm/discard,
   pending Layout input, independent Damage meter preparation, centered section
   headings, description-free checkbox alignment, plain input regions,
   deferred font-menu selection and reuse, closed language
@@ -581,14 +681,38 @@ The assertions cover:
   off and display transactions; selective final-window cooldown
   reads; strict SCT retirement deadlines and native raid-icon UV forms; dirty
   boss marker reconciliation with exact active halos; settled loot hold/hidden
-  expiry; Revive clipping reuse; event-driven player pulses; shared Layout
+  expiry; Revive clipping reuse; static player status; shared Layout
   samples/final release; unchanged waypoint math with active interpolation;
   lazy Chat time and observed/unreported tooltip owners. These fixtures are
   authored for CI and were not run locally; no live rendering/FPS is inferred.
 
+- `ui_3d_portraits_spec.lua` loads the production portrait and display owners
+  against explicit fake native models. It requires no model/backing/foreground
+  allocation while default-off, Performance Mode, hidden, absent or out-of-world;
+  one eligible creation per unit; unchanged viewport/camera/still behavior;
+  no unrelated-setting rebinding; Confirm/Cancel/profile/reset reuse; target,
+  border-level, late-callback and world/reload recovery. Native creation,
+  unsupported-method and copy failures retain stills without repeated allocation.
+  These are authored CI-only contracts, not local execution or native rendering
+  evidence.
+
+- Player-status cases in `ui_player_status_spec.lua` extract the production
+  resting-icon and portrait-shape helpers. They require the compact static image in
+  both modes, no animation callback or frame-time native polling, event-driven
+  resting visibility, unchanged mode switches, Hide portraits, parent hiding
+  and round-border recovery without another region. Source contracts reject the
+  retired pulse construction/art binding. These replace the old pulse fixture
+  and remain CI-only; no local tests or addon/game execution were run.
+
+  Artwork cases pin the compact 64-by-64 resting image and its visible
+  60-by-60 tile to the retired sheet's exact pixels, retain the authoring/runtime
+  match and a small file budget, and reject the retired full sheet in both the
+  media tree and runtime manifest. The lifecycle fixture keeps the original
+  icon geometry and event-driven visibility without an animation worker.
+
 - Native local-clock cases in `ui_idle_clock_spec.lua` reuse the production
   clock and shared HUD owner. They cover 24-hour conversion from native numeric
-  fields, midnight/noon, changed and backwards device readings, five-second and
+  fields, midnight/noon, changed and backwards device readings, sixty-second and
   hidden/off sampling, shared tooltip content and foreign owners, preview/Cancel,
   world/logout/reload restoration, synchronous CVar callbacks and later external
   preferences. Malformed/unavailable snapshots and missing fonts/failed text
@@ -596,6 +720,13 @@ The assertions cover:
   partial HUD support avoids visibility writes and
   failed handoffs retire the duplicate custom caption. These authored CI-only
   contracts do not verify native provider availability or live clock rendering.
+
+  Zone-caption cases keep the clock off in both Performance Mode states and
+  require the exact received `AZS_ZONE.zname`, native subzone-write suppression,
+  next-frame publication, unchanged writes, prior callback restoration, hidden
+  recovery and world retirement. Invalid/out-of-run data has no area fallback.
+  These cases are authored for CI only and do not verify native message timing
+  or in-game appearance.
 
   Clock-fit cases supply explicit natural glyph metrics and owning-frame scale.
   They cover leftward growth past the old fixed slot, remaining zone width,
@@ -638,12 +769,68 @@ The assertions cover:
   clock reads and ten-Hz/deferred/fresh-hover boss-debuff work. Clock tests keep
   raw native phase/time/ownership and original effect inputs. These are CI-only
   call/lifecycle contracts and do not establish rendered parity or FPS gains.
+- Decorative-allocation cases extend the warning, skull, compact health,
+  Revive and XP production fixtures, plus `ui_gold_glow_perf_spec.lua` over
+  extracted production declarations. They cover zero unused allocation in
+  Performance Mode, disabled/hidden deferral, current first-use values and
+  fitted fonts, retained pools, failed gold preparation, unchanged glow alpha
+  writes and the original pulse equations. Warning cases compare effective
+  gradient-times-parent opacity at the existing fifty-millisecond step and
+  require one opacity setter instead of four repeated gradient setters.
+  Revive's native reader and XP/health baselines remain immediate. These are
+  authored CI-only cases, not local test results or native appearance/FPS proof.
+  The target-health fixture first publishes valid native health before requiring
+  its one retained loss frame/texture and rejects an animation on that baseline.
+  XP cases count the two effect regions at first animated use separately from
+  the earlier text pool, then require the same label and complete pool on detach.
+- Third-pass cases extend the existing pet/totem, world-marker, party-waypoint
+  and player-resource fixtures in both Performance Mode states. They require
+  unchanged native countdown sampling without layout/icon helper reentry,
+  unannounced metadata/group changes, bounds/scale recovery and static failed-art
+  retries. Marker cases require one full retirement, no repeated settled buffer
+  cleanup, retained failed-release retries, foreign handlers and pooled visible
+  recovery. Waypoint cases cover unchanged/replaced native tables, every scalar
+  identity input, invalid metadata and world reentry. Resource cases retain
+  actual text/color/alpha/range/value/visibility repair and native numeric setter
+  arguments while skipping unchanged conversions, including invalid-to-valid and
+  localization-bound recovery. These are authored CI-only contracts, not local
+  execution or native appearance/FPS evidence. Loot timing is unchanged.
+- Fourth-pass cases extend the encounter/debuff and aura fixtures in both modes.
+  Native encounter reads retain fresh health/name/maximum validation and exact
+  duplicate rejection while unchanged keys skip formatting. Row cases cover
+  settled viewport/artwork preparation, same-count native reordering,
+  combined/stacked changes, width/label repair, native-width sharing and pool
+  reuse. Debuff cases keep ten-Hz native reads while empty retained pools skip
+  cleanup, and injected partial native painting remains fully clearable. Owned
+  timer hovers retain ten-Hz decimal updates without repeated icon normalization,
+  full-wait formatting or static translation. Cases include changed kind/name/
+  duration/artwork, language, Ready, malformed metadata and failed native art
+  assignment. They remain CI-only and were not run locally; no live appearance
+  or FPS result is inferred. Loot timing is unchanged.
+- Fifth-pass cases add exact production snapshot-buffer and inspector-display
+  fixtures, plus idle Revive lifecycle cases in both modes. Snapshot cases check
+  alternating list identities, reused point/lair records, same-table receipts,
+  atomic duplicate rejection, shrink/grow lengths, respawn ties, raw input
+  preservation and cleared retired fields. Revive cases retain ten-Hz phase and
+  release attempts without rereading accepted idle data, including failed native
+  restoration, fresh same-stamp activation, malformed/error retries and phase
+  retirement. Inspector cases cover unchanged presentation and wrapping work,
+  actual native text/width/anchor/color repair, font/scale invalidation, clipping
+  notices, hidden row reuse and failed metric recovery. Its complete five-Hz scan
+  remains unchanged. These are authored CI-only cases, not local execution or
+  native appearance/FPS evidence. Loot timing is unchanged.
 - API-timer presentation cases in `ui_aura_layout_perf_spec.lua` exercise
   the production owner with explicit native boundaries. They cover bright,
   text-free, borderless talent/jewelry timer icons filling their existing buttons
   with positive and zero remaining time, stable received
   order at either anchor without ready/waiting movement, retained timer tooltips
-  and unchanged regular native aura handling. Separate Debuffs cases retain
+  and unchanged regular native aura handling. Publication cases require zero
+  repeated full-list reads for unhovered unchanged icons while phase/clock
+  validation continues. They cover ordinary run delivery, same-table/same-stamp
+  timer receipts, packet replacement, fresh hover entry, decimal updates,
+  foreign tooltip ownership, malformed/native-clock failure, ready-worker sleep,
+  hidden recovery and stale-packet rejection across phase/world retirement in
+  both modes. Separate Debuffs cases retain
   native button IDs/handlers, independent roots and slots, below-Buffs defaults,
   six-column wrapping, both flip directions, anchor repair, independently hidden
   groups, pending hidden reflow and pool reuse in both Performance Mode states.
@@ -655,6 +842,15 @@ The assertions cover:
   Shared Layout continues to own position/scale/visibility transactions, profiles
   and resets. These authored cases remain
   CI-only and were not run locally; native appearance remains unverified.
+- Chat frame cases require settled panes to skip traversal and opacity-wrapper
+  calls while native visibility/opacity repair remains immediate. The full
+  production owner covers level/stat coalescing, pending text on inactive panes,
+  future slides, wheel reveal/hold/expiry, hidden delivery deferral and mode/Show
+  recovery without view allocation. Nameplate cases require Performance Mode to
+  skip first shadow allocation, actually hide retained shadows, preserve names
+  and health, defer hidden preparation and reuse shadows through names-only and
+  normal recovery. These authored cases remain CI-only and do not prove FPS or
+  packaged-client appearance.
 - Extracted production unit-border transitions actually hide inactive party and
   portrait variants, restore the retained artwork on option changes and skip
   unchanged writes. These assertions distinguish shown state from alpha; they
@@ -689,12 +885,16 @@ The assertions cover:
   only in CI. These assert call/object/lifecycle behavior, not rendering or FPS.
   Movement follow-ups cover incremental target-change discovery and synchronous
   minimap-size sharing, including unavailable and insufficient geometry retry.
-  Extracted timer foam also checks one native height sample per paint while
-  retaining the original clipping geometry and UVs at different authored heights.
+  Extracted timer foam keeps full source dimensions and leaves UVs alone.
+  The timer effect fixture checks viewport ownership, fill and foam bounds,
+  and retirement with the original texture pool.
   Production clock-progress cases cover unchanged writes within a native second,
   whole-second steps, native pauses/corrections, exact fractional completion,
   maximum changes and hidden recovery. They keep raw caption/marker inputs
-  separate from the stepped flow/foam clipping boundary.
+  separate from the stepped flow/foam clipping boundary. The effect fixture
+  checks that forward steps defer an already-due paint, settled glints reuse
+  width and UVs, and shrink or completion clips immediately inside the 20 Hz
+  interval.
   Timer-caption mocks cover unchanged/disabled formatting, current-value option
   previews, language/mode changes, scale and missing-metric retries, font preview,
   retirement and repeated empty-clock idling. They use the production label
@@ -721,6 +921,15 @@ The assertions cover:
   no replacement allocation and a fresh display value; abbreviation/Cancel must
   update both normal labels. Matching-cache cases check each original hit's
   position and loss consumption instead of a shared presentation centroid.
+  Opt-in grouping cases cover the first-hit deadline, late arrivals,
+  legacy target names versus the single MSBT stream, override of the 300 ms
+  Performance Mode window, settings defaults/discard, and count rendering in
+  all three styles through abbreviation, icon toggling and pool reuse. Editor
+  cases cover search, the dependent window selector and preview/discard.
+  Native cases combine a direct and nearby splash hit with distinct meter
+  credits, retain the stronger target's anchor and show distant damage separately.
+  Mixed-result cases check both result filters before display and on a live
+  group, critical styling, singleton counts and live count visibility.
   These are CI-only source/lifecycle assertions.
   Area-filter cases load the generated native spell data and production SCT
   over fake boundaries. They cover default-on normalization, saved off,
@@ -784,6 +993,11 @@ The assertions cover:
   target sample serves each pass while visible buttons retain independent
   range reads; missing/friendly/hostile transitions and hidden allocation/cleanup
   use fresh native boundaries.
+- Loot service cadence cases retain queued notifications through the former
+  200-ms interval and deliver at the 1.5-second boundary in both Performance Mode
+  states. Failed native handoffs use that same interval; renderer backpressure,
+  card expiry and world/settings cleanup keep their existing cases. Coverage
+  remains CI-only, without local tests or addon/game execution.
 - Loot cards clear retired text/icon bindings and reuse the original three-card
   pool. Settled updates perform zero presentation writes, and a full pool does
   not allocate a fourth card.
@@ -1028,12 +1242,29 @@ Related production mocks cover notification expiry, revive progress, static
 range feedback and skull-glow transitions. These fixtures run only in CI and
 were not run locally; they do not measure frame rate or verify native rendering.
 
-Extracted tally cases cover five-second kills/gold presentation, unchanged
-normal/cache-cost cadence, retained-text fitting, hidden recovery, mode changes
-and existing native run/tally retirement boundaries. These remain CI-only.
+Extracted tally cases cover kills/gold presentation at 250 ms in normal mode and
+five seconds in Performance Mode, counter-only wakeups between HUD passes,
+glowing number synchronization, separate cache-cost refresh, retained-text
+fitting, hidden recovery, mode changes and native run/tally retirement. These
+remain CI-only.
 
-Banner cases include the former
-fade-out window and hidden-born rows, preserving original receipt lifetimes.
+Banner cases cover the opaque hold, staggered fades, the former fade-out
+window in Performance Mode, and hidden-born rows. Nameplate cases count
+native and private bar reads and cover rejected writes, range changes and
+plate reuse in both modes. Waypoint cases cover hidden sampling, receipt
+wakeups, visible minimap repair, and reuse of a complete nearest score
+without changing its next deadline. Changed publications and partial scores
+still run through selection.
+
+The cadence fixtures also cover skipped guardian queries, zero minimap
+countdowns, same-pass phase reuse, the idle legacy/MSBT clock gate and its
+first-hit recovery, run pill resize recovery, exact flow clipping, and the
+elapsed time and long-frame cap of the gold glow.
+
+The fixtures cover offsets-only minimap projection and overflow rejection,
+empty nameplate scans and new hits, guardian row retirement and reuse, Revive
+width invalidation, disabled health captions, totem clock readiness, and late
+native chat panes.
 
 Static checks cannot prove that a shared callback is reached, native publications
 arrive in the expected order, hidden views remain idle, or textures render with
@@ -1094,9 +1325,9 @@ widgets/snapshots. Scenarios cover ordered placement, the selected 25-by-23
 gold minimap bevel and exact normal-state crop, the 16-square icon above its
 background layer, its measured rightward correction, source-coordinate bounds
 strictly inside the gold rails for both known and unknown pictures, untinted
-artwork, caption/edit bounds, first-opening coordinates for one/two captions,
-row growth, resize, attachment, hidden retirement and same-width readiness
-transitions, and shared static
+artwork, caption/edit bounds, first-opening alignment with a single caption and
+percentage fallback with both captions, row growth, resize, attachment, hidden
+retirement and same-width readiness transitions, and shared static
 behavior in both Performance Mode states. Hidden/unchanged work, missing or
 non-Heroic data, unknown-key/known-icon reuse, receipt retirement, separate
 icon/background binding failures, retry cadence, pool reuse, editing/Tooltip

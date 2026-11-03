@@ -37,6 +37,7 @@ DFRL:NewMod("Display", 0, function()
         customRunTimer = true,
         attachAffixes = true,
         customBossBars = true,
+        bossCombineBars = false,
         lootMode = "sdui",
         lootShowMarks = true,
         petRows = 6,
@@ -75,6 +76,9 @@ DFRL:NewMod("Display", 0, function()
         sctStyle = "diablo",
         sctFont = "default",
         sctShortNumbers = true,
+        sctGroupDamage = false,
+        sctShowGroupCount = true,
+        sctGroupWindow = 0.5,
         sctDistanceScaling = false,
         sctDistanceReference = 20,
         sctDistanceMinimum = 55,
@@ -113,12 +117,15 @@ DFRL:NewMod("Display", 0, function()
         keepDefeatedGuardianIcons = false,
         guardianMinimapTimers = false,
         minimapShowClock = true,
+        minimapShowLauncher = true,
         mirrorCacheWaypoint = false,
         mirrorGuardianWaypoint = false,
         mirrorPartyWaypoint = false,
         equippedJewelry = true,
         hideNativeBuild = true,
         attachJewelry = true,
+        jewelryCustomOrder = false,
+        jewelryOrder = "12345",
         attachXP = true,
         xpShowText = false,
         attachTally = true,
@@ -135,6 +142,20 @@ DFRL:NewMod("Display", 0, function()
         { value = "arial", label = "Arial Narrow", face = "Fonts\\ARIALN.TTF" },
         { value = "morpheus", label = "Morpheus", face = "Fonts\\MORPHEUS.TTF" },
         { value = "skurri", label = "Skurri", face = "Fonts\\SKURRI.TTF" },
+    }
+    display.jewelrySlots = {
+        { value = "1", label = "Ring 1" },
+        { value = "2", label = "Ring 2" },
+        { value = "3", label = "Neck" },
+        { value = "4", label = "Trinket 1" },
+        { value = "5", label = "Trinket 2" },
+    }
+    display.sctGroupWindows = {
+        { value = 0.1, label = "0.1 s" },
+        { value = 0.25, label = "0.25 s" },
+        { value = 0.5, label = "0.5 s" },
+        { value = 0.75, label = "0.75 s" },
+        { value = 1, label = "1 s" },
     }
 
     local ranges = {
@@ -174,6 +195,11 @@ DFRL:NewMod("Display", 0, function()
     local function NormalizeSctFont(value)
         if value == "default" or value == "diablo" then return value end
     end
+    local function NormalizeSctGroupWindow(value)
+        for _, entry in ipairs(display.sctGroupWindows) do
+            if value == entry.value then return value end
+        end
+    end
     local function NormalizeUiFont(value)
         for _, entry in ipairs(display.fonts) do
             if value == entry.value then return value end
@@ -193,6 +219,14 @@ DFRL:NewMod("Display", 0, function()
     end
     local function NormalizeWorldIconMode(value)
         if value == "always" or value == "near" or value == "far" then return value end
+    end
+    local function NormalizeJewelryOrder(value)
+        if type(value) ~= "string" or string.len(value) ~= 5 then return end
+        -- Five positions containing all five keys cannot duplicate an item.
+        for index = 1, 5 do
+            if not string.find(value, string.sub("12345", index, index), 1, true) then return end
+        end
+        return value
     end
     function display.ColorRGB(value)
         local hex = NormalizeColor(value)
@@ -218,6 +252,7 @@ DFRL:NewMod("Display", 0, function()
         local value
         if type(source) == "table" then value = source[key] end
         if colorKeys[key] then return NormalizeColor(value) or defaults[key] end
+        if key == "jewelryOrder" then return NormalizeJewelryOrder(value) or defaults[key] end
         if key == "meterColorMode" then return NormalizeMeterColorMode(value) or defaults[key] end
         if key == "worldCacheIconMode" or key == "worldBossIconMode" then
             return NormalizeWorldIconMode(value) or defaults[key]
@@ -233,6 +268,7 @@ DFRL:NewMod("Display", 0, function()
         if key == "tallyStyle" then return NormalizeTallyStyle(value) or defaults[key] end
         if key == "lootMode" then return NormalizeLootMode(value) or defaults[key] end
         if key == "sctFont" then return NormalizeSctFont(value) or defaults[key] end
+        if key == "sctGroupWindow" then return NormalizeSctGroupWindow(value) or defaults[key] end
         if key == "uiFont" then return NormalizeUiFont(value) or defaults[key] end
         if key == "uiFontOutline" then return NormalizeUiFontOutline(value) or defaults[key] end
         if key == "sctStyle" then
@@ -280,6 +316,9 @@ DFRL:NewMod("Display", 0, function()
         if colorKeys[key] then
             value = NormalizeColor(value)
             if not value then return end
+        elseif key == "jewelryOrder" then
+            value = NormalizeJewelryOrder(value)
+            if not value then return end
         elseif key == "meterColorMode" then
             value = NormalizeMeterColorMode(value)
             if not value then return end
@@ -301,6 +340,9 @@ DFRL:NewMod("Display", 0, function()
         elseif key == "sctFont" then
             value = NormalizeSctFont(value)
             if not value then return end
+        elseif key == "sctGroupWindow" then
+            value = NormalizeSctGroupWindow(value)
+            if not value then return end
         elseif key == "uiFont" then
             value = NormalizeUiFont(value)
             if not value then return end
@@ -313,6 +355,30 @@ DFRL:NewMod("Display", 0, function()
         if draft[key] == value then return end
         draft[key] = value
         Notify()
+    end
+    function display.SetJewelryPosition(position, choice)
+        if not draft or not draft.jewelryCustomOrder then return end
+        if type(position) ~= "number" or position < 1 or position > 5 or position ~= math.floor(position) then
+            return
+        end
+        if type(choice) ~= "string" or string.len(choice) ~= 1 or not string.find("12345", choice, 1, true) then
+            return
+        end
+        local order = draft.jewelryOrder
+        local previous = string.sub(order, position, position)
+        if previous == choice then return end
+        local source = string.find(order, choice, 1, true)
+        local updated = ""
+        for index = 1, 5 do
+            local item = string.sub(order, index, index)
+            if index == position then
+                item = choice
+            elseif index == source then
+                item = previous
+            end
+            updated = updated .. item
+        end
+        display.Set("jewelryOrder", updated)
     end
     function display.FinishEdit(save)
         if not draft then return end

@@ -65,6 +65,19 @@ presentation, visibility, language and relevant option changes clear that cache;
 actual label comparisons still repair changed or failed native text writes.
 Health formatting, native countdowns, row order and update cadence stay intact.
 
+Reused snapshots copy lair metadata and count statuses only when the accepted
+roster revision or generation changes. Health and remaining-time values still
+refresh on every request, so missing health clears an old fill immediately.
+The view keeps its filtered list until that roster, Show dead or visibility
+changes; health, countdowns, actual caption repair and measurement retries keep
+their ten-Hz refresh in both Performance Mode states. Coverage remains CI-only.
+
+Health-column measurement prepares one caption per snapshot slot. Visible rows
+reuse that same caption through the shared text setter; the existing filtered
+list keeps snapshot positions so hiding dead rows or scrolling cannot select
+another guardian's measurement. All text choices off skips formatting, and actual
+native text repair and health fills remain unchanged in both modes.
+
 The separate boss-health group shows only bosses by default. Enable
 **Guardians in boss bar** in `/sdui` → **Boss bars** to include fighting guardians. This
 does not change target health, the tracker, guidance or map markers.
@@ -258,16 +271,14 @@ progress fraction. A cosmetic zero remains `returning` until native `left == 0`
 confirms `due`; a return requires an actual occupied snapshot.
 `Remaining(left, now)` shares that calculation with accepted minimap copies,
 returning nil for an unready roster or unknown/negative `left`; the caller samples
-official run time once without requesting a health-bearing snapshot.
+official run time once when a drawable timer is positive. Native zero still
+shows `0:00`.
 
-`GetChanges(afterRevision, afterGeneration)` returns copied observations since a
-consumer's cursor, with `revision`, `generation`, `entries`, `reset` and, for a
-valid cursor, `truncated`. Initial/replayed snapshots establish a baseline and
-produce no notices. Observations are `vacated`, `returned`, `replaced` or `state`;
-missing rows never establish a death. Up to 64 observations are retained, and
-cursor truncation is explicit, including removal of part of a multi-row revision.
-Consumers must baseline on `reset` and resynchronise on `truncated`. The foundation
-never converts these observations into chat messages or sounds.
+The tracker requests health only for fighting guardians and skips countdown
+reads when **Show dead** hides returning lairs. Counts and status still
+include the whole roster. The default consumer snapshot retains all available
+health and countdowns. Lair acceptance shares the current waypoint phase
+sample, while standalone snapshot reads check native phase afresh.
 
 ## Designs and payload
 

@@ -32,6 +32,10 @@
     }
   ],
   "source_assets": {
+    "media/tex/jewelry/Runecarver.tga": {
+      "output": "media/tex/jewelry/Frame.blp",
+      "reason": "Original Blizzard Runecarver housing for the Frame.blp, GemmedRunecarver.blp and AttachedRunecarver.blp crops. Source and preparation are recorded in third_party/Jewelry-ARTWORK.md."
+    },
     "media/tex/timer/HeroicNumerals.tga": {
       "output": "media/tex/timer/HeroicNumerals.blp",
       "reason": "Lossless Bildad I/V/X numeral atlas authoring source; personal-use license and preparation are recorded in third_party/HeroicNumerals-ARTWORK.md."

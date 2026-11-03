@@ -108,9 +108,9 @@ function DFRL.tools.CreateEditorPanel(parent, width, height, name)
     frame:SetWidth(width)
     frame:SetHeight(height)
     frame:EnableMouse(true)
-    frame.editorFill = Fill(frame, 0.065, 0.068, 0.075, 0.98)
-    frame.editorFill:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -18)
-    frame.editorFill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
+    local fill = Fill(frame, 0.065, 0.068, 0.075, 0.98)
+    fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -18)
+    fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
     local pieces = {}
     local regions = {
         { 0, 0, 150, 150, 75, 75 },
@@ -142,7 +142,6 @@ function DFRL.tools.CreateEditorPanel(parent, width, height, name)
     pieces[7]:SetPoint("TOPRIGHT", tr, "TOPLEFT", 0, 0)
     pieces[8]:SetPoint("BOTTOMLEFT", bl, "BOTTOMRIGHT", 0, 0)
     pieces[8]:SetPoint("BOTTOMRIGHT", br, "BOTTOMLEFT", 0, 0)
-    frame.editorBorder = pieces
     return frame
 end
 
@@ -314,6 +313,152 @@ function DFRL.tools.CreateEditorButton(parent, text, width, height)
     return button
 end
 
+function DFRL.tools.CreateEditorDropdown(parent, owner, entries, width, height, onSelect)
+    local button = T.CreateEditorButton(parent, "", width, height)
+    button.dropdownChoices, button.dropdownSelect, button.dropdownEnabled = entries, onSelect, true
+    button.label:SetWidth(width - 44)
+    button.label:SetHeight(height - 4)
+    local arrow = Label(button, 12, "v")
+    arrow:SetPoint("RIGHT", button, "RIGHT", -12, 0)
+    local function Value(entry) return entry.value or entry.id or entry.face or entry[1] end
+    local function Caption(entry) return entry.label or entry[2] end
+    function button:Close()
+        local menu = owner.editorDropdownMenu
+        if menu and menu.owner == self then menu:Hide() end
+    end
+    function button:SetValue(value)
+        self.dropdownValue = value
+        for _, entry in ipairs(self.dropdownChoices) do
+            if Value(entry) == value then
+                T.SetTextIfChanged(self.label, Caption(entry))
+                break
+            end
+        end
+        local menu = owner.editorDropdownMenu
+        if menu and menu.owner == self then
+            for _, item in ipairs(menu.buttons) do
+                if item.choice ~= nil and item.editorSelected ~= (item.choice == value) then
+                    item:SetSelected(item.choice == value)
+                end
+            end
+        end
+    end
+    local enableMouse, setWidth, disable = button.EnableMouse, button.SetWidth, button.Disable
+    function button:EnableMouse(value)
+        self.dropdownEnabled = value ~= false and value ~= nil and value ~= 0
+        enableMouse(self, value)
+        if not self.dropdownEnabled then self:Close() end
+    end
+    function button:Disable()
+        disable(self)
+        self:Close()
+    end
+    function button:SetWidth(value)
+        setWidth(self, value)
+        self.label:SetWidth(math.max(1, value - 44))
+    end
+    HookScript(button, "OnHide", function() button:Close() end)
+    button:SetScript("OnClick", function()
+        local enabled = button:IsEnabled()
+        if
+            not button.dropdownEnabled
+            or enabled == nil
+            or enabled == false
+            or enabled == 0
+            or not button:IsVisible()
+        then
+            return
+        end
+        local menu = owner.editorDropdownMenu
+        if menu and menu:IsShown() and menu.owner == button then
+            menu:Hide()
+            return
+        end
+        if not menu then
+            menu = CreateFrame("Button", nil, owner)
+            menu:SetAllPoints(UIParent)
+            menu:SetFrameLevel(owner:GetFrameLevel() + 30)
+            menu:EnableMouse(true)
+            menu:EnableMouseWheel(true)
+            menu:SetScript("OnClick", function() menu:Hide() end)
+            local function ScrollMenu()
+                local direction, source = arg1, menu.owner
+                menu:Hide()
+                if source and source.dropdownScroll then source.dropdownScroll(direction) end
+            end
+            menu:SetScript("OnMouseWheel", ScrollMenu)
+            menu:SetScript("OnHide", function()
+                menu.owner = nil
+                if menu.buttons then
+                    for _, item in ipairs(menu.buttons) do
+                        item.choice = nil
+                        if item:IsShown() then item:Hide() end
+                    end
+                end
+            end)
+            menu:Hide()
+            menu.list = T.CreateEditorPanel(menu, width, 1)
+            menu.list:SetFrameLevel(menu:GetFrameLevel() + 10)
+            if menu.list.SetClampedToScreen then menu.list:SetClampedToScreen(true) end
+            menu.buttons = {}
+            owner.editorDropdownMenu = menu
+            HookScript(owner, "OnHide", function()
+                if menu:IsShown() then menu:Hide() end
+            end)
+            menu.ScrollMenu = ScrollMenu
+        end
+        if menu:IsShown() then menu:Hide() end
+        menu.owner = button
+        local menuWidth = math.max(260, button:GetWidth())
+        menu.list:SetWidth(menuWidth)
+        menu.list:SetHeight(table.getn(button.dropdownChoices) * 30 + 16)
+        menu.list:ClearAllPoints()
+        if button.dropdownOpenUp then
+            menu.list:SetPoint("BOTTOMLEFT", button, "TOPLEFT", 0, 4)
+        else
+            menu.list:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -4)
+        end
+        for index, entry in ipairs(button.dropdownChoices) do
+            local item = menu.buttons[index]
+            if not item then
+                item = T.CreateEditorButton(menu.list, "", menuWidth - 16, 28)
+                item.label:SetHeight(24)
+                item:SetPoint("TOPLEFT", menu.list, "TOPLEFT", 8, -8 - (index - 1) * 30)
+                item:EnableMouseWheel(true)
+                item:SetScript("OnMouseWheel", menu.ScrollMenu)
+                local selected = item
+                item:SetScript("OnClick", function()
+                    local source, value = menu.owner, selected.choice
+                    menu:Hide()
+                    local available = source and source:IsEnabled()
+                    if
+                        source
+                        and source.dropdownEnabled
+                        and available ~= nil
+                        and available ~= false
+                        and available ~= 0
+                        and source:IsVisible()
+                    then
+                        source:SetValue(value)
+                        source.dropdownSelect(value)
+                    end
+                end)
+                menu.buttons[index] = item
+            end
+            item.choice = Value(entry)
+            if item:GetWidth() ~= menuWidth - 16 then item:SetWidth(menuWidth - 16) end
+            item.label:SetWidth(menuWidth - 28)
+            T.SetTextIfChanged(item.label, Caption(entry))
+            if item.editorSelected ~= (item.choice == button.dropdownValue) then
+                item:SetSelected(item.choice == button.dropdownValue)
+            end
+            item:Show()
+        end
+        menu:Show()
+    end)
+    return button
+end
+
 function DFRL.tools.CreateEditorInput(parent, width, height)
     local box = CreateFrame("EditBox", nil, parent)
     box:SetWidth(width)
@@ -324,10 +469,10 @@ function DFRL.tools.CreateEditorInput(parent, width, height)
     box:SetTextInsets(8, 8, 0, 0)
     -- Plain recessed fields match the metal panel without a decorative frame.
     -- Thin native-color edges avoid another full-surface alpha layer.
-    box.editorFill = Fill(box, 0.025, 0.028, 0.032, 0.98)
-    box.editorFill:ClearAllPoints()
-    box.editorFill:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
-    box.editorFill:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
+    local fill = Fill(box, 0.025, 0.028, 0.032, 0.98)
+    fill:ClearAllPoints()
+    fill:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+    fill:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
     box.editorBorder = {}
     for index, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
         local edge = box:CreateTexture(nil, "BORDER")
@@ -415,7 +560,7 @@ function DFRL.tools.CreateEditorToggle(parent, text, description, width, callbac
     button.label:SetHeight(16)
     button.label:SetJustifyH("LEFT")
     if description then
-        button.description = Label(button, 10, description)
+        button.description = Label(button, 9, description)
         button.description:SetTextColor(0.59, 0.59, 0.56)
         button.description:SetPoint("TOPLEFT", button, "TOPLEFT", 32, -24)
         button.description:SetWidth(math.max(1, width - 36))
@@ -1017,11 +1162,12 @@ function DFRL.tools.CreateEditorNavigator(parent, sidebar, groups, sections, opt
     scroll:SetScript("OnMouseWheel", Scroll)
 
     local groupLabels = {}
+    local categoryPitch = options.categoryPitch or 48
     for index, group in ipairs(groups) do
         groupLabels[group.key] = group.label
         local key = group.key
-        local button = DFRL.tools.CreateEditorCategory(sidebar, group.label, options.sidebarWidth, 42)
-        button:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 6, -48 - navigation.searchHeight - (index - 1) * 48)
+        local button = DFRL.tools.CreateEditorCategory(sidebar, group.label, options.sidebarWidth, categoryPitch - 6)
+        button:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 6, -48 - navigation.searchHeight - (index - 1) * categoryPitch)
         button.label:SetHeight(32)
         button.label:SetJustifyV("MIDDLE")
         button:SetScript("OnClick", function() navigation.Select(key) end)

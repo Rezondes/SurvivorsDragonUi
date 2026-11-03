@@ -10,13 +10,19 @@ action in its tooltip.
 
 The launcher's center starts exactly on the minimap's bottom-left corner, where
 the two edges meet, with no outward offset. It can be dragged around the square
-edge. Its edge position is session-only. The minimap's existing Layout group owns
-its movement, scale and hiding; the launcher adds no saved state or Layout group.
+edge. Its edge position is session-only. The minimap's Layout group still owns
+movement, scale and parent visibility.
 Clicking uses `layout.ToggleEdit`: a closed editor opens through `BeginEdit`;
 an active session closes through `CancelEdit`, discarding unconfirmed changes.
 Escape also cancels the full settings window, including from its numeric and
 profile-name fields. Confirm remains the save action. These routes share the
 existing profiles, preview and cleanup paths.
+
+Under `/sdui` → **Map & navigation** → **Minimap**, **Show SDUI button** is on by
+default. Turn it off to hide only the gold launcher; `/sdui` still opens settings.
+The switch previews immediately and follows Confirm, Cancel, profiles and both
+reset paths. Hiding the launcher clears its hover and ends its drag. Showing it
+again restores the same session position without another frame or updater.
 
 While editing, the existing minimap `onEdit` callback puts the launcher at
 TOOLTIP level 125, above Layout's level-100 selection and below the settings
@@ -30,13 +36,32 @@ zone strip's default screen position. Saved Layout positions still take priority
 Both Performance Mode states use these static anchors with no added regions,
 artwork or recurring work.
 
+## Zone name
+
+The text above the minimap shows the received `AZS_ZONE.zname` exactly, in the
+game's language. Native area/subzone updates cannot replace it, and the zone
+subtitle is not appended. Missing or invalid zone data leaves the caption empty;
+there is no area-name fallback.
+
+The existing zone button refreshes once after a native `AZSZONE` message, world
+entry or language change, after native parsing. Showing the minimap refreshes
+the caption; hiding it cancels pending work. World leave, logout and reload clear
+the old name. Changed-only writes and the same existing controls serve both
+Performance Mode states, including with the clock off. No frame, region, asset,
+setting or recurring zone poll is added.
+
+The center-screen zone-entry splash is disabled, including its territory and
+subzone lines. The existing `PermanentlyDisableFrame` helper retires
+`ZoneTextFrame` and `SubZoneTextFrame`, removes their event/animation callbacks
+and blocks later Show attempts. This adds no polling or drawing resources.
+
 ## Optional local clock
 
 `/sdui` → **Minimap** → **Show clock** is on by default, with the zone name on
 the left and local time on the right. Turning it off centers the zone name in
 the existing top panel and stops the clock's update callback and local-time
-reads. The existing worker checks the date every five
-seconds only while the clock is enabled and visible on older builds. With
+reads. The existing worker checks the date once every 60 seconds in both
+Performance Mode states, only while the clock is enabled and visible on older builds. With
 `AZS_GetLocalTime()` available, that same worker reads the native snapshot
 instead. Our label and tooltip use its hour/minute fields in **24-hour `HH:MM`**
 format, including when the native English caption uses AM/PM. Unchanged native

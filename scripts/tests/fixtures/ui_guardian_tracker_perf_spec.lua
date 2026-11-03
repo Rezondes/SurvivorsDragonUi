@@ -13,9 +13,12 @@ local function Tracker()
     context.entries = { context.entry }
     env.DFRL.minimapDefaults = { right = 16 }
     env.DFRL.guardians = {
-        GetSnapshot = function(snapshot)
+        GetSnapshot = function(snapshot, trackerShowDead)
+            assert(trackerShowDead == context.settings.guardianShowDead, "tracker lost the current dead-row filter")
             context.reads.snapshot = (context.reads.snapshot or 0) + 1
             snapshot.status, snapshot.rows = "ready", context.entries
+            snapshot.revision, snapshot.generation = context.revision, context.generation
+            snapshot.counts.fighting = context.fighting
             return snapshot
         end,
     }
@@ -98,6 +101,168 @@ local function Tracker()
     context:ResetCounts()
     return context, context:Row()
 end
+
+for _, performance in ipairs({ false, true }) do
+    local context, row = Tracker()
+    local env = context.env
+    context.settings.performanceMode = performance
+    context.revision, context.generation = 1, 1
+    context:Tick()
+    local nativeTable, listUpdates = env.table, 0
+    env.table = {}
+    for name, value in pairs(nativeTable) do
+        env.table[name] = value
+    end
+    env.table.setn = function(list, count)
+        listUpdates = listUpdates + 1
+        return nativeTable.setn(list, count)
+    end
+    context.entry.remaining = 60
+    context:Tick()
+    assert(
+        listUpdates == 0 and row.status:GetText() == "Respawns in 1:00",
+        "roster reuse held countdowns or refiltered"
+    )
+    context.entries[2] = { key = "2:8", index = 2, id = 8, name = "New guardian", state = "asleep", status = "asleep" }
+    context.revision = 2
+    context:Tick()
+    assert(listUpdates == 1, "a new roster publication did not rebuild the visible list")
+    context.generation = 2
+    context:Tick()
+    assert(listUpdates == 2, "roster generation recovery reused an old filter")
+    context:SetHidden(true)
+    local hiddenUpdates = listUpdates
+    context:Tick()
+    assert(listUpdates == hiddenUpdates, "hidden tracker kept rebuilding the roster filter")
+    context:SetHidden(false)
+    context:Tick()
+    assert(listUpdates > hiddenUpdates, "visible recovery failed to rebuild its retired filter")
+end
+print("PASS guardian filters reuse accepted revisions while countdowns, publications and hidden recovery stay live")
+
+for _, performance in ipairs({ false, true }) do
+    local context, first = Tracker()
+    local env = context.env
+    context.settings.performanceMode = performance
+    local entry = {
+        key = "2:8",
+        index = 2,
+        id = 8,
+        name = "Fighting guardian",
+        state = "awake",
+        status = "fighting",
+        hp = 50,
+        maximum = 100,
+        healthFraction = 0.5,
+    }
+    context.entries[2], context.revision, context.generation = entry, 1, 1
+    context:Tick()
+    local second
+    for _, object in ipairs(context.objects) do
+        if object.parent == env.DFRL_GuardianTracker and object.status and object.bar and object ~= first then
+            second = object
+            break
+        end
+    end
+    assert(second and second:IsShown() and second.health:GetText() == "50 / 100")
+    local allocated, isShown = #context.objects, second.pill.IsShown
+    local failCleanup = true
+    function second.pill:IsShown()
+        context.reads.sparePill = (context.reads.sparePill or 0) + 1
+        if failCleanup then
+            failCleanup = false
+            error("injected guardian cleanup failure")
+        end
+        return isShown(self)
+    end
+    context.entries[2], context.revision = nil, 2
+    local ok = pcall(function() context:Tick() end)
+    assert(not ok and second:IsShown(), "guardian retirement did not reach the failed native operation")
+    context:ResetCounts()
+    context:Tick()
+    assert(
+        context.reads.sparePill == 1
+            and not second:IsShown()
+            and not isShown(second.pill)
+            and second.health:GetText() == ""
+            and second.bar.value == 0,
+        "failed guardian retirement did not retry and clear the departed row"
+    )
+    context:ResetCounts()
+    for _ = 1, 5 do
+        context:Tick()
+    end
+    assert(not context.reads.sparePill, "settled guardian refresh visited an already retired row")
+    entry.name, entry.hp, entry.healthFraction = "Returned guardian", 25, 0.25
+    context.entries[2], context.revision = entry, 3
+    context:Tick()
+    assert(second:IsShown() and second.health:GetText() == "25 / 100" and #context.objects == allocated)
+    context:Event(context.controller, "PLAYER_LEAVING_WORLD")
+    assert(not second:IsShown() and not isShown(second.pill), "world leave missed the reused active row")
+end
+print("PASS guardian spare rows retire once with native cleanup retries and pool reuse")
+
+for _, performance in ipairs({ false, true }) do
+    local context, row = Tracker()
+    local env = context.env
+    context.settings.performanceMode = performance
+    local compact = env.T.CompactHealth
+    env.T.CompactHealth = function(...)
+        context.reads.healthFormats = (context.reads.healthFormats or 0) + 1
+        return compact(...)
+    end
+    context.revision, context.generation, context.fighting = 1, 1, 1
+    context.entry.state, context.entry.status = "awake", "fighting"
+    context.entry.hp, context.entry.maximum, context.entry.healthFraction = 50, 100, 0.5
+    context:Tick()
+    assert(
+        row.health:GetText() == "50 / 100" and context.reads.healthFormats == 2,
+        "health was formatted for measurement and paint"
+    )
+    context:ResetCounts()
+    row.health.text = "native reset"
+    context:Tick()
+    assert(
+        row.health:GetText() == "50 / 100" and not context.reads.healthFormats,
+        "prepared caption lost actual text repair"
+    )
+    context.entry.hp, context.entry.healthFraction = 40, 0.4
+    context:Tick()
+    assert(row.health:GetText() == "40 / 100" and row.bar.value == 0.4 and context.reads.healthFormats == 2)
+    context.entry.state, context.entry.status = "empty", "returning"
+    context.entry.hp, context.entry.maximum, context.entry.healthFraction = nil, nil, nil
+    context.revision, context.fighting = 2, 0
+    context:Tick()
+    assert(row.health:GetText() == "" and row.bar.value == 0, "zero-fighting roster retained visible health")
+    env.ipairs = function(list)
+        if list == context.entries then context.reads.healthScans = (context.reads.healthScans or 0) + 1 end
+        return ipairs(list)
+    end
+    context:ResetCounts()
+    context:Tick()
+    assert(not context.reads.healthScans, "settled zero-fighting roster still scanned for health captions")
+    context.revision, context.fighting = 3, 1
+    context.entries[2] = {
+        key = "2:8",
+        index = 2,
+        id = 8,
+        name = "Other",
+        state = "awake",
+        status = "fighting",
+        hp = 75,
+        maximum = 100,
+        healthFraction = 0.75,
+    }
+    context:SetSetting("guardianShowDead", false)
+    context:Tick()
+    assert(
+        row.health:GetText() == "75 / 100" and row.bar.value == 0.75,
+        "filtered row borrowed another slot's prepared caption"
+    )
+end
+print(
+    "PASS guardian health shares prepared captions across measurement and painting with filtered-row and native repair parity"
+)
 
 do
     local context, row = Tracker()

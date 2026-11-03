@@ -87,6 +87,7 @@ DFRL:NewMod("Waypoints", 3, function()
         },
     }
     local identity
+    local identitySource = {}
     local runWasActive = false
     local inWorld, dirty, age = true, true, 0
     local nearestClock = 0
@@ -423,7 +424,7 @@ DFRL:NewMod("Waypoints", 3, function()
         end
 
         local function Offset(entry, scale)
-            local east, north, _, metric = navigation.GuideDelta(entry)
+            local east, north, _, metric = navigation.GuideDelta(entry, true)
             if not metric or not Number(east) or not Number(north) then return end
             local x, y = east * scale, north * scale
             if Number(x) and Number(y) then return x, y end
@@ -483,7 +484,7 @@ DFRL:NewMod("Waypoints", 3, function()
                             and showGuardianTimers
                             and entry.state == "empty"
                             and Number(entry.left)
-                            and entry.left >= 0
+                            and entry.left > 0
                             and now == nil
                         then
                             now = Native("AZS_GetRunTime") or false
@@ -530,8 +531,10 @@ DFRL:NewMod("Waypoints", 3, function()
             end
             local pinsVisible = false
             for _, tracker in ipairs(trackers) do
-                UpdateTrackerPins(tracker, scale, edge, checkHover)
-                if next(tracker.minimapPins) then pinsVisible = true end
+                if scale or next(tracker.minimapPins) then
+                    UpdateTrackerPins(tracker, scale, edge, checkHover)
+                    if next(tracker.minimapPins) then pinsVisible = true end
+                end
             end
             navigation.UpdateMinimapPlayer(pinsVisible)
             if checkHover then UpdateGuardianTooltip() end
@@ -626,6 +629,40 @@ DFRL:NewMod("Waypoints", 3, function()
         MakeHUD(tracker)
     end
 
+    local function WipeSnapshotTable(target)
+        if not target then return end
+        for key in pairs(target) do
+            target[key] = nil
+        end
+    end
+    local function ClearSnapshotBuffer(buffer)
+        if not buffer or buffer.cleared then return end
+        for index = 1, buffer.pointCount do
+            WipeSnapshotTable(buffer.points[index])
+        end
+        for index = 1, buffer.lairCount do
+            WipeSnapshotTable(buffer.lairRows[index])
+        end
+        WipeSnapshotTable(buffer.entries)
+        WipeSnapshotTable(buffer.seen)
+        WipeSnapshotTable(buffer.lairs)
+        WipeSnapshotTable(buffer.minimap)
+        if table.setn then
+            table.setn(buffer.entries, 0)
+            if buffer.lairs then table.setn(buffer.lairs, 0) end
+            if buffer.minimap then table.setn(buffer.minimap, 0) end
+        end
+        buffer.pointCount, buffer.lairCount, buffer.cleared = 0, 0, true
+    end
+    local function RejectSnapshot(buffer) ClearSnapshotBuffer(buffer) end
+    local function SnapshotRow(pool, index)
+        local row = pool[index]
+        if not row then
+            row = {}
+            pool[index] = row
+        end
+        return row
+    end
     local function Clear(tracker)
         if tracker.kind == "guardian" and DFRL.guardians then DFRL.guardians.Clear() end
         ClearMinimapPins(tracker.kind)
@@ -643,7 +680,10 @@ DFRL:NewMod("Waypoints", 3, function()
         tracker.selectedKey, tracker.selected, tracker.provisionalSelection = nil, nil, nil
         tracker.selectionDeferred = nil
         tracker.selectionEntries, tracker.nextSelectionAt = nil, nil
+        WipeSnapshotTable(tracker.nearestScore)
         tracker.presentation = nil
+        ClearSnapshotBuffer(tracker.snapshotBuffer)
+        ClearSnapshotBuffer(tracker.stagingSnapshot)
         tracker.distanceValue, tracker.distanceLanguage, tracker.distanceLabel = nil, nil, nil
         if tracker.hudWanted ~= false then
             tracker.hudWanted = false
@@ -752,32 +792,34 @@ DFRL:NewMod("Waypoints", 3, function()
             return tracker.acceptedEntries
         end
         local guardian = tracker.kind == "guardian"
-        local result, seen, lairs, minimap = {}, {}, {}, {}
+        local buffer = tracker.stagingSnapshot
+        if not buffer then
+            buffer = { entries = {}, seen = {}, points = {}, pointCount = 0, lairCount = 0, cleared = true }
+            if guardian then
+                buffer.lairs, buffer.minimap, buffer.lairRows = {}, {}, {}
+            end
+            tracker.stagingSnapshot = buffer
+        end
+        ClearSnapshotBuffer(buffer)
+        buffer.cleared = false
+        local result, seen, lairs, minimap = buffer.entries, buffer.seen, buffer.lairs, buffer.minimap
+        local count = 0
         local nextRespawn, allDefeated = nil, guardian
         for _, entry in ipairs(list) do
-            if type(entry) ~= "table" then return end
+            if type(entry) ~= "table" then return RejectSnapshot(buffer) end
             -- Both occupied states mean a living guardian. Coordinates belong
             -- to its lair, not to the creature while it moves during a fight.
             local occupied = (entry.state == "asleep" or entry.state == "awake") and Integer(entry.id, 1)
             if guardian then
-                if not Integer(entry.index, 1) or seen[entry.index] then return end
+                if not Integer(entry.index, 1) or seen[entry.index] then return RejectSnapshot(buffer) end
                 seen[entry.index] = true
                 if entry.state ~= "empty" or entry.id ~= 0 then allDefeated = false end
-                table.insert(lairs, {
-                    index = entry.index,
-                    id = entry.id,
-                    name = entry.name,
-                    state = entry.state,
-                    left = entry.left,
-                    x = entry.x,
-                    y = entry.y,
-                    z = entry.z,
-                    mx = entry.mx,
-                    my = entry.my,
-                    runId = type(entry.runId) == "string" and entry.runId or nil,
-                    mapId = Number(entry.mapId) and entry.mapId or nil,
-                    spaceId = type(entry.spaceId) == "string" and entry.spaceId or nil,
-                })
+                buffer.lairCount = buffer.lairCount + 1
+                local lair = SnapshotRow(buffer.lairRows, buffer.lairCount)
+                lair.index, lair.id, lair.name, lair.state, lair.left =
+                    entry.index, entry.id, entry.name, entry.state, entry.left
+                lair.x, lair.y, lair.z, lair.mx, lair.my = entry.x, entry.y, entry.z, entry.mx, entry.my
+                lairs[buffer.lairCount] = lair
             end
             if not guardian or occupied then
                 if
@@ -786,44 +828,36 @@ DFRL:NewMod("Waypoints", 3, function()
                     or not Number(entry.y)
                     or (guardian and not Integer(entry.index, 1))
                 then
-                    return
+                    return RejectSnapshot(buffer)
                 end
                 if not guardian then
-                    if seen[entry.id] then return end
+                    if seen[entry.id] then return RejectSnapshot(buffer) end
                     seen[entry.id] = true
                 end
                 local key = guardian and (tostring(entry.index) .. ":" .. tostring(entry.id)) or tostring(entry.id)
-                local point = {
-                    key = key,
-                    id = entry.id,
-                    index = guardian and entry.index or nil,
-                    state = guardian and entry.state or nil,
-                    name = guardian and type(entry.name) == "string" and entry.name ~= "" and entry.name or nil,
-                    x = entry.x,
-                    y = entry.y,
-                    mx = entry.mx,
-                    my = entry.my,
-                    runId = type(entry.runId) == "string" and entry.runId or nil,
-                    mapId = Number(entry.mapId) and entry.mapId or nil,
-                    spaceId = type(entry.spaceId) == "string" and entry.spaceId or nil,
-                }
-                table.insert(result, point)
-                if guardian then table.insert(minimap, point) end
+                buffer.pointCount = buffer.pointCount + 1
+                local point = SnapshotRow(buffer.points, buffer.pointCount)
+                point.key, point.id = key, entry.id
+                point.state = guardian and entry.state or nil
+                point.name = guardian and type(entry.name) == "string" and entry.name ~= "" and entry.name or nil
+                point.x, point.y, point.mx, point.my = entry.x, entry.y, entry.mx, entry.my
+                point.runId = type(entry.runId) == "string" and entry.runId or nil
+                point.mapId = Number(entry.mapId) and entry.mapId or nil
+                point.spaceId = type(entry.spaceId) == "string" and entry.spaceId or nil
+                count = count + 1
+                result[count] = point
+                if guardian then minimap[buffer.pointCount] = point end
             elseif entry.state == "empty" and entry.id == 0 and Number(entry.x) and Number(entry.y) then
-                local point = {
-                    key = tostring(entry.index) .. ":0",
-                    state = entry.state,
-                    name = type(entry.name) == "string" and entry.name ~= "" and entry.name or nil,
-                    left = Number(entry.left) and entry.left >= 0 and entry.left or nil,
-                    x = entry.x,
-                    y = entry.y,
-                    mx = entry.mx,
-                    my = entry.my,
-                    runId = type(entry.runId) == "string" and entry.runId or nil,
-                    mapId = Number(entry.mapId) and entry.mapId or nil,
-                    spaceId = type(entry.spaceId) == "string" and entry.spaceId or nil,
-                }
-                table.insert(minimap, point)
+                buffer.pointCount = buffer.pointCount + 1
+                local point = SnapshotRow(buffer.points, buffer.pointCount)
+                point.key, point.state = tostring(entry.index) .. ":0", entry.state
+                point.name = type(entry.name) == "string" and entry.name ~= "" and entry.name or nil
+                point.left = Number(entry.left) and entry.left >= 0 and entry.left or nil
+                point.x, point.y, point.mx, point.my = entry.x, entry.y, entry.mx, entry.my
+                point.runId = type(entry.runId) == "string" and entry.runId or nil
+                point.mapId = Number(entry.mapId) and entry.mapId or nil
+                point.spaceId = type(entry.spaceId) == "string" and entry.spaceId or nil
+                minimap[buffer.pointCount] = point
                 if
                     point.left
                     and (
@@ -836,6 +870,17 @@ DFRL:NewMod("Waypoints", 3, function()
                 end
             end
         end
+        if table.setn then
+            table.setn(result, count)
+            if guardian then
+                table.setn(lairs, buffer.lairCount)
+                table.setn(minimap, buffer.pointCount)
+            end
+        end
+        -- The accepted list keeps its identity for the whole publication.
+        -- Only the spare buffer is writable during candidate validation.
+        WipeSnapshotTable(tracker.nearestScore)
+        tracker.snapshotBuffer, tracker.stagingSnapshot = buffer, tracker.snapshotBuffer
         tracker.acceptedSnapshot = list
         tracker.acceptedGeneration, tracker.acceptedStamp, tracker.acceptedEntries = received, stamp, result
         tracker.acceptedMinimapEntries = guardian and minimap or nil
@@ -873,6 +918,7 @@ DFRL:NewMod("Waypoints", 3, function()
             tracker.provisionalSelection = nil
             tracker.selectionDeferred = nil
             tracker.selectionEntries, tracker.nextSelectionAt = nil, nil
+            WipeSnapshotTable(tracker.nearestScore)
             return
         end
         local previous
@@ -911,14 +957,39 @@ DFRL:NewMod("Waypoints", 3, function()
         then
             return
         end
-        tracker.selectionDeferred = nil
         -- Throttle the all-destination search independently of the responsive
         -- selected-arrow/minimap reader. Initial and retired targets bypass it.
-        if tracker.kind ~= "party" then tracker.nextSelectionAt = nearestClock + NEAREST_INTERVAL end
+        local position, complete
+        local scored = tracker.nearestScore
+        if tracker.kind ~= "party" then
+            -- A skipped pass still advances the deadline for later movement.
+            tracker.nextSelectionAt = nearestClock + NEAREST_INTERVAL
+            if tracker.entries[1] and navigation.SampleWorldPosition then
+                position = navigation.SampleWorldPosition()
+            end
+            complete = position and position.runId ~= nil
+            if
+                complete
+                and previous
+                and not tracker.selectionDeferred
+                and scored
+                and scored.x == position.x
+                and scored.y == position.y
+                and scored.mapId == position.mapId
+                and scored.runId == position.runId
+                and scored.spaceId == position.spaceId
+            then
+                return
+            end
+        end
+        tracker.selectionDeferred = nil
         tracker.selected = nil
         local best
         for _, entry in ipairs(tracker.entries) do
             local east, north, distance = navigation.Delta(entry)
+            -- Only complete native world distances are repeatable from this
+            -- position and publication. Map fallbacks and partial scores retry.
+            if complete and (entry.mapSelection or not Number(distance)) then complete = false end
             local score = distance or (east and math.sqrt(east * east + north * north))
             if score and (not best or score < best or (score == best and entry.key == tracker.selectedKey)) then
                 tracker.selected, best = entry, score
@@ -931,6 +1002,14 @@ DFRL:NewMod("Waypoints", 3, function()
             -- then resolve the automatic nearest selection on a later refresh.
             tracker.selected = previous or tracker.entries[1]
             tracker.provisionalSelection = tracker.selected ~= nil
+        end
+        if complete then
+            scored = scored or {}
+            scored.x, scored.y, scored.mapId, scored.runId, scored.spaceId =
+                position.x, position.y, position.mapId, position.runId, position.spaceId
+            tracker.nearestScore = scored
+        else
+            WipeSnapshotTable(scored)
         end
         tracker.selectedKey = tracker.selected and tracker.selected.key or nil
     end
@@ -1108,7 +1187,17 @@ DFRL:NewMod("Waypoints", 3, function()
             and Number(zone.map)
             and Number(_G.AZS_ZONE_UPDATED)
         then
-            local nextIdentity = zone.zone .. ":" .. tostring(zone.map) .. ":" .. tostring(_G.AZS_ZONE_UPDATED)
+            local stamp = _G.AZS_ZONE_UPDATED
+            if
+                identitySource.zone ~= zone.zone
+                or identitySource.map ~= zone.map
+                or identitySource.stamp ~= stamp
+                or not identitySource.value
+            then
+                identitySource.value = zone.zone .. ":" .. tostring(zone.map) .. ":" .. tostring(stamp)
+                identitySource.zone, identitySource.map, identitySource.stamp = zone.zone, zone.map, stamp
+            end
+            local nextIdentity = identitySource.value
             if nextIdentity ~= identity then
                 if identity then RetireSnapshots(false) end
                 ClearAll()
@@ -1191,26 +1280,39 @@ DFRL:NewMod("Waypoints", 3, function()
         -- Defer reads until the native parser and zone/minimap handlers finish.
         dirty = true
     end)
+    local elapsed, refreshDue, minimapVisible
     local function UpdateWaypoints()
-        local elapsed = tonumber(arg1) or 0
-        if not Number(elapsed) or elapsed < 0 then elapsed = 0 end
-        nearestClock = nearestClock + elapsed
-        age = age + elapsed
-        local refreshed = false
-        if dirty or age >= 0.1 then
+        if refreshDue then
             dirty, age = false, 0
             Refresh()
             if worldMarkers then worldMarkers.Service(inWorld) end
-            refreshed = true
         end
         if inWorld then
             for _, tracker in ipairs(trackers) do
-                if refreshed or tracker.hud:IsVisible() then UpdateGuide(tracker, elapsed) end
+                if refreshDue or tracker.hud:IsVisible() then UpdateGuide(tracker, elapsed) end
             end
         end
-        if refreshed or (Minimap and Minimap:IsVisible()) then UpdateMinimapPins(refreshed) end
+        if refreshDue or minimapVisible then UpdateMinimapPins(refreshDue) end
     end
-    controller:SetScript("OnUpdate", function() navigation.WithSample(UpdateWaypoints) end)
+    controller:SetScript("OnUpdate", function()
+        elapsed = tonumber(arg1) or 0
+        if not Number(elapsed) or elapsed < 0 then elapsed = 0 end
+        nearestClock = nearestClock + elapsed
+        age = age + elapsed
+        refreshDue = dirty or age >= 0.1
+        minimapVisible = not refreshDue and Minimap and Minimap:IsVisible()
+        if refreshDue or minimapVisible then
+            navigation.WithSample(UpdateWaypoints)
+        elseif inWorld then
+            -- Hidden guides and minimap need only the regular or deferred refresh.
+            for _, tracker in ipairs(trackers) do
+                if tracker.hud:IsVisible() then
+                    navigation.WithSample(UpdateWaypoints)
+                    return
+                end
+            end
+        end
+    end)
     local function UpdateDisplay()
         if worldMarkers then
             worldMarkers.UpdateOptions()

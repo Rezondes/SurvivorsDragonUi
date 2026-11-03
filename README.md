@@ -80,6 +80,8 @@ For a clear view while moving, use `/sdui lock`. Click a blue frame for its cont
 
 Click **Confirm** in the full editor to save or **Cancel** to undo. In **Profiles**, **Save profile and close** and **Overwrite and close** save the named profile and current setup together, then close the editor. Loading or deleting a profile stays a preview until Confirm. Click the minimap glyph again or press **Escape** to cancel and close. Leaving the run or reloading also discards unsaved changes. **Addon defaults** resets the same options as `/sdui reset`.
 
+To hide the gold launcher, turn off **Show SDUI button** under **Map & navigation** → **Minimap**. You can still open the editor with `/sdui`.
+
 **Performance Mode**, above **Layout**, starts off. Turn it on for static portraits and HUD effects, chat and banners without fading, and no cooldown numbers. Combat text keeps its usual motion and selected style. Your individual choices return when you turn it off.
 
 ### Action bar and portraits
@@ -99,6 +101,8 @@ Move the **Tooltip** handle to place regular hover cards. Its Layout controls al
 ### Combat text and run display
 
 New setups use **Custom** outgoing damage in **Diablo IV** style, with **Default** font, **90%** size and **Abbreviate damage (K, M, B, T)** enabled. Existing saved choices are kept. Under **Combat** → **Combat text**, change these choices, turn outgoing numbers off, or use **Game settings**. For the game's damage numbers, choose **Game settings**, then enable **Show Target Damage** in the game options. All settings below the mode selector are dimmed and inactive unless **Custom** is selected; their values are kept. Choose **Default** or **Diablo IV (PT Serif)** under **Font** for any custom damage style. Turn off **Abbreviate damage (K, M, B, T)** for full values. Diablo IV uses pale white for normal hits, yellow for criticals and amber for unusually large criticals; class colors return when you choose another style. Over enemies and Diablo IV numbers follow their matched nameplate while they animate.
+
+To show fewer floating numbers, turn on **Group damage numbers** and choose a **Grouping window**. The option combines normal and critical hits from the same attack, including hits on nearby enemies. Leave **Show hit count** on to see how many hits made up each total, such as **(x2) 100**. Turn it off to see just the total and your chosen icon.
 
 The DPS meter is off by default. Turn on **Enable damage meter** under **Damage meter** and Confirm to show the game's damage totals and DPS. Click its heading to cycle through Damage Done, Healing Done, Boss Damage and Party Damage; views waiting for their first data are skipped. Scroll for more rows. Recognized ranks of the same ability share one row. Party Damage shows heroes with their native portraits during co-op. Choose 1 to 10 rows and which numbers, icons, ranks and header values to show. **Name font size** changes names separately from **Number font size**; unused number space goes to names automatically. Move, scale or hide **DPS meter** under **Layout**. Details does not need to be installed.
 

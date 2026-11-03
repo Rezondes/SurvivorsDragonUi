@@ -65,21 +65,21 @@ assert(reads == 2 and label:GetText() == "12:34" and frame:IsVisible())
 assert(not env.SurvivorsDragonUiDisplay, "clock preview saved early")
 assert(zoneButton.point[1] == "LEFT" and zoneText.justify == "LEFT")
 context:ResetCounts()
-for _ = 1, 40 do
-    context:Call(frame, "OnUpdate", 0.1)
+for _ = 1, 59 do
+    context:Call(frame, "OnUpdate", 1)
 end
-assert(reads == 2, "clock sampled before its five-second interval")
+assert(reads == 2, "clock sampled before its sixty-second interval")
 context:NoPresentationWrites()
 context:Call(frame, "OnUpdate", 1.1)
 assert(reads == 3 and not context.writes.SetText, "unchanged minute was repainted")
 panel:Hide()
 assert(frame:GetScript("OnUpdate") == nil, "hidden minimap retained the clock callback")
 value = "12:35"
-context:Call(frame, "OnUpdate", 20)
+context:Call(frame, "OnUpdate", 120)
 assert(reads == 3, "hidden clock sampled local time")
 panel:Show()
 assert(label:GetText() == "12:35" and reads == 4 and frame:GetScript("OnUpdate"))
-context:Call(frame, "OnUpdate", 4.9)
+context:Call(frame, "OnUpdate", 59.9)
 assert(reads == 4, "Show retained a pre-hide deadline")
 context:Call(frame, "OnUpdate", 0.2)
 assert(reads == 5)
@@ -170,9 +170,63 @@ local function NativeClock(preference, configure)
     local factory = assert(loadfile(assert(arg[1])))
     setfenv(factory, boundary)
     factory().Watch(c.clock, c.label, zone, name, c.panel)
-    function c:ClockTick(seconds) self:Call(self.clock, "OnUpdate", seconds or 5.1) end
+    function c:ClockTick(seconds) self:Call(self.clock, "OnUpdate", seconds or 60.1) end
     return c, state, boundary
 end
+
+for _, performance in ipairs({ false, true }) do
+    local phase, priorUpdates = "playing", 0
+    local c, state, boundary = NativeClock(true, function(c, _, env)
+        env.SurvivorsDragonUiDisplay = { performanceMode = performance, minimapShowClock = false }
+        env.AZS_GetPhase = function() return phase end
+        env.AZS_ZONE = { zname = "Elwynn Forest", zsub = "The Defias Uprising" }
+        c.zone:SetScript("OnUpdate", function() priorUpdates = priorUpdates + 1 end)
+    end)
+    local previous = c.zone:GetScript("OnUpdate")
+    assert(c.zoneText:GetText() == "Elwynn Forest" and state.reads == 0)
+    c:ResetCounts()
+    c.zoneText:SetText("Goldshire")
+    c:NoPresentationWrites()
+    assert(c.zoneText:GetText() == "Elwynn Forest", "native subzone replaced the API zone")
+    c:Event(c.clock, "CHAT_MSG_ADDON", "UNRELATED")
+    assert(c.zone:GetScript("OnUpdate") == previous)
+    c:Event(c.clock, "CHAT_MSG_ADDON", "AZSZONE")
+    boundary.AZS_ZONE = { zname = "Лес", zsub = "Subtitle" }
+    assert(c.zoneText:GetText() == "Elwynn Forest", "zone was read before native parsing")
+    c:Call(c.zone, "OnUpdate", 0.1)
+    assert(c.zoneText:GetText() == "Лес" and priorUpdates == 1)
+    assert(c.zone:GetScript("OnUpdate") == previous and state.reads == 0, "zone refresh retained a worker or read time")
+    c.panel:Hide()
+    boundary.AZS_ZONE.zname = "Westfall"
+    c:Event(c.clock, "CHAT_MSG_ADDON", "AZSZONE")
+    c:ResetCounts()
+    c.zoneText:SetText("Sentinel Hill")
+    c:NoPresentationWrites()
+    c.panel:Show()
+    assert(c.zoneText:GetText() == "Westfall", "hidden zone did not recover on Show")
+    c:Call(c.zone, "OnUpdate", 0.1)
+    for _, invalid in ipairs({ false, 42, {} }) do
+        boundary.AZS_ZONE.zname = invalid
+        c.zoneText:SetText("Sentinel Hill")
+        assert(c.zoneText:GetText() == "", "invalid zone used the native area fallback")
+    end
+    boundary.AZS_ZONE.zname = "Westfall"
+    phase = nil
+    c.zoneText:SetText("Sentinel Hill")
+    assert(c.zoneText:GetText() == "", "out-of-run zone displayed stale API data")
+    phase = "ready"
+    c:Event(c.clock, "PLAYER_ENTERING_WORLD")
+    c:Call(c.zone, "OnUpdate", 0.1)
+    assert(c.zoneText:GetText() == "Westfall")
+    c:Event(c.clock, "CHAT_MSG_ADDON", "AZSZONE")
+    c:Event(c.clock, "PLAYER_LEAVING_WORLD")
+    assert(c.zoneText:GetText() == "" and c.zone:GetScript("OnUpdate") == previous)
+    c.zoneText:SetText("Sentinel Hill")
+    assert(c.zoneText:GetText() == "", "native write restored a retired zone")
+end
+print(
+    "PASS exact API minimap zone, native subzone suppression, deferred publication and clock-off/hidden/world lifecycle"
+)
 
 for _, performance in ipairs({ false, true }) do
     local c, state, boundary = NativeClock(
@@ -191,7 +245,7 @@ for _, performance in ipairs({ false, true }) do
     assert(boundary.SurvivorsDragonUiDisplay.minimapShowClock == nil, "native clock preview saved early")
     local allocated, writes = #c.objects, state.writes
     c:ResetCounts()
-    c:ClockTick(4.9)
+    c:ClockTick(59.9)
     assert(state.reads == 2)
     c:NoPresentationWrites()
     c:ClockTick(0.2)
@@ -212,7 +266,7 @@ for _, performance in ipairs({ false, true }) do
     assert(boundary.GameTooltip:IsOwned(foreign) and boundary.GameTooltip:IsShown())
     c.panel:Hide()
     local reads = state.reads
-    c:ClockTick(30)
+    c:ClockTick(120)
     assert(state.reads == reads and not c.clock:GetScript("OnUpdate"))
     state.value = { text = "23:59", hour = 23, minute = 59, is24Hour = true }
     c.panel:Show()
@@ -262,14 +316,14 @@ for _, performance in ipairs({ false, true }) do
     state.textWidth, state.scale = 64.2, 0.3
     measurements = state.measurements
     display.Set("uiFont", "default")
-    c:ClockTick(30)
+    c:ClockTick(120)
     assert(state.measurements == measurements and state.reads == reads, "hidden clock read metrics or time")
     c.panel:Show()
     Fitted(69)
     display.Set("minimapShowClock", false)
     assert(c.zone:GetWidth() == 172 and c.zoneText:GetWidth() == 172, "clock-off kept a reserved slot")
     measurements, reads = state.measurements, state.reads
-    c:ClockTick(30)
+    c:ClockTick(120)
     assert(state.measurements == measurements and state.reads == reads)
     display.FinishEdit(false)
     Fitted(69)

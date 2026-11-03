@@ -208,8 +208,8 @@ DFRL:NewMod("Bars", 1, function()
         DFRL.actionBarBGleft = left
         DFRL.actionBarBGright = right
 
-        -- Keep every socket foot and straight span on one shared baseline.
-        -- Legal source strips join with neighbour gutters, without separate caps.
+        -- Keep the small lower arch joining the straight edge to Runecarver.
+        -- The guttered strips omit the old circle's upper and side surround.
         local artHeight = defaults.height + 2 * defaults.topInset
         local socketBottom = defaults.buttonWidth * 2 / 36
         local upper = T.CreateArtworkStrip(bar, "BACKGROUND", 3)
@@ -535,8 +535,8 @@ DFRL:NewMod("Bars", 1, function()
                 -- sequence 1 for the ready flash. Stop before that handoff.
                 cooldown:SetScript("OnUpdateModel", function()
                     if
-                        DFRL.display.Get("customActionBar") ~= false
-                        and performanceMode
+                        performanceMode
+                        and DFRL.display.Get("customActionBar") ~= false
                         and HideReadyCooldown(cooldown)
                     then
                         return

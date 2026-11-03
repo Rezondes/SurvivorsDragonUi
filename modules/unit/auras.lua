@@ -115,8 +115,8 @@ DFRL:NewMod("Player Auras", 2, function()
             end
         end
         for _, group in ipairs(groups) do
-            local paint = group.frame:IsVisible()
-            if (paint or editing) and (force or group.dirty or editing) then
+            local paint = (force or group.dirty or editing) and group.frame:IsVisible()
+            if paint or editing then
                 local slot = 0
                 for priority = 1, 2 do
                     for _, entry in ipairs(entries) do
@@ -157,9 +157,16 @@ DFRL:NewMod("Player Auras", 2, function()
     local controller = CreateFrame("Frame")
     local blockedPacket, blockedStamp, blockedReceived
     local blockedRun, blockedRunStamp
+    local publication = {}
     local phases = { playing = true, choosing = true, paused = true, victory = true }
-    local Tick
+    local Tick, RefreshTimers
+    local timerUpdates = false
 
+    local function SetTimerUpdates(active)
+        if timerUpdates == active then return end
+        controller:SetScript("OnUpdate", active and Tick or nil)
+        timerUpdates = active
+    end
     local function Number(value) return type(value) == "number" and value - value == 0 end
     local function Native(getter)
         if type(getter) ~= "function" then return end
@@ -172,15 +179,32 @@ DFRL:NewMod("Player Auras", 2, function()
     end
     local function Tooltip(entry)
         if editing or not inWorld or not entry.name or not entry.button:IsVisible() or not GameTooltip then return end
+        local cache = entry.tooltipCache or {}
+        entry.tooltipCache = cache
+        local language = DFRL.locale.code
+        if cache.language ~= language then
+            cache.kindText, cache.waitText, cache.readyText, cache.remainingFormat = nil, nil, nil, nil
+            cache.language = language
+        end
+        if cache.kind ~= entry.kind or not cache.kindText then
+            cache.kindText = DFRL.locale.Text(entry.kind == "summon" and "Next summon" or "Cooldown")
+            cache.kind = entry.kind
+        end
+        if cache.wait ~= entry.wait or not cache.waitText then
+            cache.waitText = string.format(DFRL.locale.Text("Full wait: %.1f sec"), entry.wait)
+            cache.wait = entry.wait
+        end
         GameTooltip:SetOwner(entry.button, "ANCHOR_NONE")
         GameTooltip:ClearLines()
         GameTooltip:SetText(entry.name, 1, 0.82, 0)
-        GameTooltip:AddLine(DFRL.locale.Text(entry.kind == "summon" and "Next summon" or "Cooldown"), 1, 1, 1)
-        GameTooltip:AddLine(string.format(DFRL.locale.Text("Full wait: %.1f sec"), entry.wait), 1, 1, 1)
+        GameTooltip:AddLine(cache.kindText, 1, 1, 1)
+        GameTooltip:AddLine(cache.waitText, 1, 1, 1)
         if entry.ready then
-            GameTooltip:AddLine(DFRL.locale.Text("Ready"), 0.3, 1, 0.3)
+            if not cache.readyText then cache.readyText = DFRL.locale.Text("Ready") end
+            GameTooltip:AddLine(cache.readyText, 0.3, 1, 0.3)
         else
-            GameTooltip:AddLine(string.format(DFRL.locale.Text("Remaining: %.1f sec"), entry.remaining), 1, 1, 1)
+            if not cache.remainingFormat then cache.remainingFormat = DFRL.locale.Text("Remaining: %.1f sec") end
+            GameTooltip:AddLine(string.format(cache.remainingFormat, entry.remaining), 1, 1, 1)
         end
         GameTooltip:Show()
     end
@@ -197,9 +221,10 @@ DFRL:NewMod("Player Auras", 2, function()
         entry.icon:SetAlpha(1)
         SizeButton(entry)
         button:SetScript("OnEnter", function()
-            if editing then return end
+            if editing or not inWorld then return end
             hovered = entry
-            Tooltip(entry)
+            if RefreshTimers(true) then SetTimerUpdates(true) end
+            if hovered == entry then Tooltip(entry) end
         end)
         button:SetScript("OnLeave", HideHover)
         button:SetScript("OnShow", function() buffGroup.dirty = true end)
@@ -217,8 +242,11 @@ DFRL:NewMod("Player Auras", 2, function()
         entry.button:Hide()
         entry.icon:SetTexture(nil)
         entry.name, entry.kind, entry.wait, entry.remaining, entry.ready, entry.texture = nil, nil, nil, nil, nil, nil
+        entry.iconSource, entry.tooltipCache = nil, nil
     end
     local function ClearTimers()
+        publication.packet, publication.stamp, publication.received = nil, nil, nil
+        publication.phase, publication.ticking, publication.getter, publication.clock = nil, nil, nil, nil
         HideHover()
         for _, entry in ipairs(timers) do
             HideTimer(entry)
@@ -229,7 +257,7 @@ DFRL:NewMod("Player Auras", 2, function()
         observePending = false
         blockedPacket, blockedStamp, blockedReceived = _G.AZS_TIMERS, _G.AZS_TIMERS_UPDATED, received
         blockedRun, blockedRunStamp = _G.AZS_RUN, _G.AZS_RUN_UPDATED
-        controller:SetScript("OnUpdate", nil)
+        SetTimerUpdates(false)
         ClearTimers()
     end
     local function Icon(value)
@@ -237,7 +265,7 @@ DFRL:NewMod("Player Auras", 2, function()
         if not string.find(value, "[/\\]") then return "Interface\\Icons\\" .. value end
         return value
     end
-    local function RefreshTimers()
+    RefreshTimers = function(force)
         if not inWorld then return end
         -- Read phase before retained caches; the getter itself has no world guard.
         local phase = Native(_G.AZS_GetPhase)
@@ -257,8 +285,33 @@ DFRL:NewMod("Player Auras", 2, function()
             return
         end
         if not container:IsVisible() then return end
-        local now = Native(_G.AZS_GetRunTime)
-        local list = Number(now) and now >= 0 and Native(_G.AZS_GetTimers)
+        local getter, clock = _G.AZS_GetTimers, _G.AZS_GetRunTime
+        if type(getter) ~= "function" or type(clock) ~= "function" then
+            ClearTimers()
+            return
+        end
+        local now = Native(clock)
+        if not Number(now) or now < 0 then
+            ClearTimers()
+            return
+        end
+        local ownsHover = hovered and GameTooltip and GameTooltip:IsOwned(hovered.button) and GameTooltip:IsShown()
+        -- These buttons have no countdown or ready-state artwork. Reuse their
+        -- copied presentation between publications; only an owned hover needs
+        -- fresh native remaining time. Keep phase, receipt and clock validation.
+        if
+            not force
+            and not ownsHover
+            and publication.packet == packet
+            and publication.stamp == stamp
+            and publication.received == received
+            and publication.phase == phase
+            and publication.getter == getter
+            and publication.clock == clock
+        then
+            return phase == "playing" and publication.ticking
+        end
+        local list = Native(getter)
         if type(list) ~= "table" then
             ClearTimers()
             return
@@ -284,11 +337,14 @@ DFRL:NewMod("Player Auras", 2, function()
         -- Preserve every received effect, including distinct rows with one name.
         for index, timer in ipairs(list) do
             local entry = Timer(index)
-            local texture = Icon(timer.icon)
+            local source = type(timer.icon) == "string" and timer.icon or nil
+            local texture = entry.texture
+            if not texture or entry.iconSource ~= source then texture = Icon(source) end
             if entry.texture ~= texture then
                 entry.icon:SetTexture(texture)
                 entry.texture = texture
             end
+            entry.iconSource = source
             entry.name, entry.kind, entry.wait = timer.name, timer.kind, timer.duration
             entry.remaining, entry.ready = timer.remaining, timer.ready
             if not entry.button:IsShown() then entry.button:Show() end
@@ -299,6 +355,9 @@ DFRL:NewMod("Player Auras", 2, function()
             HideTimer(timers[index])
         end
         Layout(false)
+        if not container:IsVisible() then return end
+        publication.packet, publication.stamp, publication.received = packet, stamp, received
+        publication.phase, publication.ticking, publication.getter, publication.clock = phase, ticking, getter, clock
         if hovered and GameTooltip and GameTooltip:IsOwned(hovered.button) and GameTooltip:IsShown() then
             Tooltip(hovered)
         end
@@ -309,14 +368,14 @@ DFRL:NewMod("Player Auras", 2, function()
         if age < 0.1 then return end
         age = 0
         observePending = false
-        if not RefreshTimers() then controller:SetScript("OnUpdate", nil) end
+        if not RefreshTimers() then SetTimerUpdates(false) end
     end
     local function WakeTimers(observe)
         if not inWorld then return end
         observePending = observePending or observe == true
         if not container:IsVisible() and not observePending then return end
         age = 0.1
-        controller:SetScript("OnUpdate", Tick)
+        SetTimerUpdates(true)
     end
 
     local function HookGroup(group)
@@ -375,7 +434,7 @@ DFRL:NewMod("Player Auras", 2, function()
     end)
     HookScript(container, "OnHide", function()
         ClearTimers()
-        if not observePending then controller:SetScript("OnUpdate", nil) end
+        if not observePending then SetTimerUpdates(false) end
     end)
     HookScript(debuffContainer, "OnShow", function() Layout(true) end)
     DFRL.locale.Listen(function()

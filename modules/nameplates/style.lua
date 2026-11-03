@@ -34,16 +34,21 @@ DFRL:NewMod("NameplateStyle", 5, function()
         return label
     end
 
-    local function EnsureHealth(style)
-        if style.health then return end
-        local visual, overlay = style.visual, style.overlay
+    local function EnsureShadow(style)
+        if style.shadow then return end
+        local visual = style.visual
         local shadow = visual:CreateTexture(nil, "BACKGROUND")
         shadow:SetTexture(path .. "kui_frame_glow.blp")
         shadow:SetTexCoord(0, 0.469, 0, 0.625)
         shadow:SetPoint("TOPLEFT", visual, "TOPLEFT", -GLOW_OFFSET, GLOW_OFFSET)
         shadow:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", GLOW_OFFSET, -GLOW_OFFSET)
         shadow:SetVertexColor(0, 0, 0, 0.85)
+        style.shadow = shadow
+    end
 
+    local function EnsureHealth(style)
+        if style.health then return end
+        local visual, overlay = style.visual, style.overlay
         local background = visual:CreateTexture(nil, "ARTWORK")
         background:SetTexture("Interface\\Buttons\\WHITE8X8")
         background:SetAllPoints(visual)
@@ -54,14 +59,16 @@ DFRL:NewMod("NameplateStyle", 5, function()
         health:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", -1, 1)
         health:SetFrameLevel(visual:GetFrameLevel() + 1)
         health:EnableMouse(false)
-        health:SetStatusBarTexture(path .. "kui_bar.blp")
+        style.healthFill = T.NewClippedFill(health)
+        style.healthFill.RefreshWidth(WIDTH - 2)
+        style.healthFill.SetTexture(path .. "kui_bar.blp")
 
         local raid = overlay:CreateTexture(nil, "OVERLAY")
         raid:SetPoint("LEFT", overlay, "RIGHT", 8, 0)
         raid:SetWidth(30)
         raid:SetHeight(30)
         raid:Hide()
-        style.shadow, style.background, style.health, style.raid = shadow, background, health, raid
+        style.background, style.health, style.raid = background, health, raid
     end
 
     local function Attach(plate, data)
@@ -113,7 +120,44 @@ DFRL:NewMod("NameplateStyle", 5, function()
         end
     end
 
-    local function Update(plate, data, namesOnly, fontSize, sample)
+    local function ClearHealthSample(style)
+        style.healthMinimum, style.healthMaximum, style.healthValue = nil, nil, nil
+    end
+
+    local function UpdateHealth(style, minimum, maximum, value, red, green, blue)
+        -- The private bar has no other writer. Cache actual readback so a
+        -- rejected write or a range change that clamps the fill stays live.
+        local health, fill = style.health, style.healthFill
+        local oldMinimum, oldMaximum = style.healthMinimum, style.healthMaximum
+        if oldMinimum == nil or oldMinimum ~= minimum or oldMaximum ~= maximum then
+            if oldMinimum == nil then
+                oldMinimum, oldMaximum = health:GetMinMaxValues()
+            end
+            if oldMinimum ~= minimum or oldMaximum ~= maximum then
+                health:SetMinMaxValues(minimum, maximum)
+                oldMinimum, oldMaximum = health:GetMinMaxValues()
+                style.healthValue = nil
+            end
+            style.healthMinimum, style.healthMaximum = oldMinimum, oldMaximum
+        end
+        local oldValue = style.healthValue
+        if oldValue == nil or oldValue ~= value then
+            if oldValue == nil then oldValue = health:GetValue() end
+            if oldValue ~= value then
+                health:SetValue(value)
+                oldValue = health:GetValue()
+            end
+            style.healthValue = oldValue
+        end
+        local fraction = 0
+        if oldMinimum ~= nil and oldMaximum ~= nil and oldValue ~= nil and oldMaximum > oldMinimum then
+            fraction = (oldValue - oldMinimum) / (oldMaximum - oldMinimum)
+        end
+        fill.SetColor(red, green, blue)
+        fill.SetFraction(fraction)
+    end
+
+    local function Update(plate, data, namesOnly, fontSize, sample, performanceMode)
         if not plate:IsShown() then return end
         local style = data.style
         if not style then return end
@@ -143,21 +187,30 @@ DFRL:NewMod("NameplateStyle", 5, function()
         local nativeTexture = not data.nativeLayersSuppressed and data.bar:GetStatusBarTexture()
         if nativeTexture and nativeTexture.SetAlpha and nativeTexture:GetAlpha() ~= 0 then nativeTexture:SetAlpha(0) end
 
-        if style.namesOnly ~= namesOnly then
+        if style.namesOnly ~= namesOnly or style.performanceMode ~= performanceMode then
+            ClearHealthSample(style)
             if namesOnly then
                 if style.health then
-                    if style.shadow:IsShown() then style.shadow:Hide() end
                     if style.background:IsShown() then style.background:Hide() end
                     if style.health:IsShown() then style.health:Hide() end
                     if style.raid:IsShown() then style.raid:Hide() end
                 end
             else
                 EnsureHealth(style)
-                if not style.shadow:IsShown() then style.shadow:Show() end
+                if not performanceMode then EnsureShadow(style) end
                 if not style.background:IsShown() then style.background:Show() end
                 if not style.health:IsShown() then style.health:Show() end
             end
+            if style.shadow then
+                local show = not namesOnly and not performanceMode
+                if show and not style.shadow:IsShown() then
+                    style.shadow:Show()
+                elseif not show and style.shadow:IsShown() then
+                    style.shadow:Hide()
+                end
+            end
             style.namesOnly = namesOnly
+            style.performanceMode = performanceMode
         end
 
         local red, green, blue
@@ -197,25 +250,17 @@ DFRL:NewMod("NameplateStyle", 5, function()
             value = data.bar:GetValue()
         end
         red, green, blue = PlateColor(red, green, blue)
-        local oldMinimum, oldMaximum = style.health:GetMinMaxValues()
-        if oldMinimum ~= minimum or oldMaximum ~= maximum then style.health:SetMinMaxValues(minimum, maximum) end
-        if style.health:GetValue() ~= value then style.health:SetValue(value) end
-        local oldRed, oldGreen, oldBlue, oldAlpha = style.health:GetStatusBarColor()
-        if
-            not T.NearlyEqual(oldRed, red)
-            or not T.NearlyEqual(oldGreen, green)
-            or not T.NearlyEqual(oldBlue, blue)
-            or (oldAlpha and not T.NearlyEqual(oldAlpha, 1))
-        then
-            style.health:SetStatusBarColor(red, green, blue, 1)
-        end
+        UpdateHealth(style, minimum, maximum, value, red, green, blue)
         local regions = data.nativeRegions
         CopyNativeIcon(style.raid, regions and regions[6])
     end
 
     local function SetMasked(data, masked)
         local style = data.style
-        if not style or style.masked == masked then return end
+        if not style then return end
+        -- Forced restores also revisit a reused native plate without a mask change.
+        ClearHealthSample(style)
+        if style.masked == masked then return end
         style.masked = masked
         -- Hide only the complete custom visual child, including its shadow.
         -- The native plate stays live for the V-off SCT coordinate feed.

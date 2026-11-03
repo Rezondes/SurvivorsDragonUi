@@ -31,7 +31,7 @@ DFRL:NewMod("GuardianTracker", 4, function()
     local preferredStatusWidth, headerHeight = 128, WIDTH / 8
     local width, statusWidth = 240, 128
     local healthWidth = 0
-    local presentation = { snapshot = { rows = {}, counts = {} }, shown = false }
+    local presentation = { snapshot = { rows = {}, counts = {} }, shown = false, activeRows = 0 }
     local frame = CreateFrame("Frame", "DFRL_GuardianTracker", UIParent)
     frame:SetScale(DEFAULT_SCALE)
     frame:SetWidth(width)
@@ -74,7 +74,7 @@ DFRL:NewMod("GuardianTracker", 4, function()
     measure:Hide()
 
     local function Number(value) return type(value) == "number" and value - value == 0 end
-    local function Format(source, first, second) return string.format(DFRL.locale.Text(source), first, second) end
+    local function Format(source, value) return string.format(DFRL.locale.Text(source), value) end
     local function Time(seconds)
         local rounded = math.max(0, math.ceil(seconds))
         return string.format("%d:%02d", math.floor(rounded / 60), math.mod(rounded, 60))
@@ -145,19 +145,24 @@ DFRL:NewMod("GuardianTracker", 4, function()
         if row.pill:IsShown() then row.pill:Hide() end
         if row:IsShown() then row:Hide() end
     end
+    local function RetireRows(used)
+        while presentation.activeRows > used do
+            ClearRow(rows[presentation.activeRows])
+            presentation.activeRows = presentation.activeRows - 1
+        end
+    end
     local function Clear()
         rowOffset = 0
         presentation.healthLabels, healthWidth, dirty = nil, 0, true
         presentation.filteredCount = 0
+        presentation.filterRevision, presentation.filterGeneration, presentation.filterRows = nil, nil, nil
         if presentation.filtered then
             for index in ipairs(presentation.filtered) do
                 presentation.filtered[index] = nil
             end
             table.setn(presentation.filtered, 0)
         end
-        for _, row in ipairs(rows) do
-            ClearRow(row)
-        end
+        RetireRows(0)
         if presentation.shown then
             presentation.shown = false
             frame:Hide()
@@ -267,7 +272,9 @@ DFRL:NewMod("GuardianTracker", 4, function()
             T.SetFont(measure, T.EncounterHealthStyle.fontSize, "OUTLINE")
             presentation.measureSize = T.EncounterHealthStyle.fontSize
         end
-        if showCurrent or showMaximum or showPercentage then
+        if snapshot.counts.fighting == 0 then
+            presentation.healthLabels = nil
+        elseif showCurrent or showMaximum or showPercentage then
             local labels = presentation.healthLabels or {}
             presentation.healthLabels = labels
             for index, entry in ipairs(snapshot.rows) do
@@ -307,7 +314,7 @@ DFRL:NewMod("GuardianTracker", 4, function()
     end
     local function Refresh()
         if not inWorld or DFRL.layout.IsHidden("guardianTracker") or not UIParent:IsVisible() then return end
-        local snapshot = roster.GetSnapshot(presentation.snapshot)
+        local snapshot = roster.GetSnapshot(presentation.snapshot, showDead)
         if snapshot.status ~= "ready" or not snapshot.rows[1] then
             Clear()
             return
@@ -333,25 +340,40 @@ DFRL:NewMod("GuardianTracker", 4, function()
         T.SetTextIfChanged(title, DFRL.locale.Text("GUARDIANS"))
         local filtered, count = presentation.filtered or {}, 0
         presentation.filtered = filtered
-        for _, entry in ipairs(snapshot.rows) do
-            if showDead or entry.state == "asleep" or entry.state == "awake" then
-                count = count + 1
-                filtered[count] = entry
+        if
+            not Number(snapshot.revision)
+            or presentation.filterRevision ~= snapshot.revision
+            or presentation.filterGeneration ~= snapshot.generation
+            or presentation.filterRows ~= snapshot.rows
+            or presentation.filterShowDead ~= showDead
+        then
+            for index, entry in ipairs(snapshot.rows) do
+                if showDead or entry.state == "asleep" or entry.state == "awake" then
+                    count = count + 1
+                    filtered[count] = index
+                end
             end
+            for index = count + 1, table.getn(filtered) do
+                filtered[index] = nil
+            end
+            table.setn(filtered, count)
+            presentation.filteredCount = count
+            presentation.filterRevision, presentation.filterGeneration = snapshot.revision, snapshot.generation
+            presentation.filterRows, presentation.filterShowDead = snapshot.rows, showDead
+        else
+            count = presentation.filteredCount
         end
-        for index = count + 1, table.getn(filtered) do
-            filtered[index] = nil
-        end
-        table.setn(filtered, count)
-        presentation.filteredCount = count
         local capacity = visibleRows > 0 and visibleRows or count
         rowOffset = math.max(0, math.min(rowOffset, count - capacity))
         local used = 0
         for index = rowOffset + 1, math.min(count, rowOffset + capacity) do
-            local entry = filtered[index]
+            local snapshotIndex = filtered[index]
+            local entry = snapshot.rows[snapshotIndex]
             if entry then
                 used = used + 1
                 local row = rows[used] or MakeRow()
+                -- Keep partially painted rows eligible for cleanup.
+                if used > presentation.activeRows then presentation.activeRows = used end
                 if
                     row.layoutWidth ~= width
                     or row.layoutIndex ~= used
@@ -379,6 +401,15 @@ DFRL:NewMod("GuardianTracker", 4, function()
                     ClearStatus(row)
                     if row.value ~= entry.healthFraction then row.bar:SetValue(entry.healthFraction) end
                     row.value = entry.healthFraction
+                    -- Measurement prepared this exact snapshot row's caption.
+                    -- All text controls off needs no formatting in either pass.
+                    local prepared = presentation.healthLabels and presentation.healthLabels[snapshotIndex]
+                    local text
+                    if not (showCurrent or showMaximum or showPercentage) then
+                        text = ""
+                    elseif prepared then
+                        text = prepared.encounterText
+                    end
                     T.SetEncounterHealthText(
                         row.health,
                         entry.hp,
@@ -386,7 +417,8 @@ DFRL:NewMod("GuardianTracker", 4, function()
                         showCurrent,
                         showMaximum,
                         shortenHealth,
-                        showPercentage
+                        showPercentage,
+                        text
                     )
                     if row.status:IsShown() then row.status:Hide() end
                     if not row.pill:IsShown() then row.pill:Show() end
@@ -401,9 +433,7 @@ DFRL:NewMod("GuardianTracker", 4, function()
                 if not row:IsShown() then row:Show() end
             end
         end
-        for index = used + 1, table.getn(rows) do
-            ClearRow(rows[index])
-        end
+        RetireRows(used)
         local height = headerHeight + 12 + (visibleRows > 0 and visibleRows or used) * ROW_HEIGHT
         if not T.NearlyEqual(frame:GetHeight(), height) then frame:SetHeight(height) end
     end
@@ -512,6 +542,7 @@ DFRL:NewMod("GuardianTracker", 4, function()
     end)
     DFRL.layout.ListenVisibility("guardianTracker", function(permitted)
         ClearStatuses()
+        presentation.filterRevision, presentation.filterGeneration, presentation.filterRows = nil, nil, nil
         dirty, age = true, 0.1
         SyncUpdates()
         if permitted then Refresh() end

@@ -16,6 +16,10 @@ local function Pets()
     local create = context.Object
     function context:Object(...)
         local object = create(self, ...)
+        function object:SetScale(value)
+            self.context.writes.SetScale = (self.context.writes.SetScale or 0) + 1
+            self.scale = value
+        end
         function object:GetEffectiveScale()
             return (self.scale or 1) * (self.parent and self.parent:GetEffectiveScale() or 1)
         end
@@ -207,6 +211,40 @@ Test("countdowns wait for native run time, respect pauses and keep zero-time nat
     c:Publish("AZSTOTEMS", {})
     c:Tick()
     assert(not c.layoutFrame:IsShown(), "empty native snapshot retained a visible totem")
+end)
+
+Test("totem clocks are sampled once only when a usable countdown is received", function()
+    for _, performance in ipairs({ false, true }) do
+        local c = Pets()
+        c:SetSetting("performanceMode", performance)
+        c:SetSetting("hidePetTimers", false)
+        c:Publish("AZSTOTEMS", {})
+        c:Tick()
+        assert(c.reads.phase == 1 and c.reads.totems == 1 and not c.reads.clock, "empty feed read the native clock")
+
+        local absent, invalid = Totem("absent_totem", 2), Totem("invalid_totem", 1)
+        absent.ends, invalid.ends, invalid.remaining = nil, nil, math.huge
+        local list = { absent, invalid }
+        c:Publish("AZSTOTEMS", list)
+        c:ResetCounts()
+        c:Tick()
+        local _, timer, count = c:Labels(1)
+        assert(timer == "--:--" and count == "x2" and select(2, c:Labels(2)) == "--:--")
+        assert(c.reads.phase == 1 and c.reads.totems == 1 and not c.reads.clock, "unusable timers read the clock")
+
+        local zero = Totem("zero_totem", 3)
+        zero.ends, zero.remaining = nil, 0
+        table.insert(list, zero)
+        table.insert(list, Totem("active_totem", 1, 20))
+        c.runTime = nil
+        c:ResetCounts()
+        c:Tick()
+        assert(c.reads.clock == 1 and select(2, c:Labels(3)) == "--:--" and select(2, c:Labels(4)) == "--:--")
+        c.runTime = 10
+        c:ResetCounts()
+        c:Tick()
+        assert(c.reads.clock == 1 and select(2, c:Labels(3)) == "0:00" and select(2, c:Labels(4)) == "0:10")
+    end
 end)
 
 Test("upgrade cards hide whole pet groups without retiring their roster or allocating hidden artwork", function()
@@ -426,6 +464,101 @@ Test("world, reload and reset cleanup preserve the passive pool without stale re
         c.reloaded and not c.controller:GetScript("OnUpdate") and not c.layoutFrame:IsShown(),
         "reload missed shared cleanup"
     )
+end)
+
+Test("timer-only samples retain native reads without reentering layout or icon preparation", function()
+    for _, performance in ipairs({ false, true }) do
+        local c = Pets()
+        c:SetSetting("performanceMode", performance)
+        c:SetSetting("hidePetTimers", false)
+        local get = c.env.DFRL.display.Get
+        c.env.DFRL.display.Get = function(key)
+            if key == "petRows" or key == "petSpacing" then c.reads.layout = (c.reads.layout or 0) + 1 end
+            return get(key)
+        end
+        local circle = c.env.T.NewCircularIcon
+        c.env.T.NewCircularIcon = function(...)
+            local image = circle(...)
+            local bind = image.Bind
+            image.Bind = function(...)
+                c.reads.binds = (c.reads.binds or 0) + 1
+                return bind(...)
+            end
+            return image
+        end
+        local summon = Summon(1, "imp", "Imp", 12)
+        summon.ends = 22
+        local totem = Totem("searing_totem", 3, 30)
+        c:Publish("AZSPETS", { summon })
+        c:Publish("AZSTOTEMS", { totem })
+        c:Tick()
+        local objects, width, height = #c.objects, c.layoutFrame:GetWidth(), c.layoutFrame:GetHeight()
+        c:ResetCounts()
+        for index = 1, 10 do
+            c.runTime = 10 + index / 10
+            c:Tick()
+        end
+        assert(c.reads.pets == 10 and c.reads.totems == 10 and c.reads.clock == 10, "timer sampling slowed")
+        assert(not c.reads.layout and not c.reads.binds and #c.objects == objects, "countdowns repeated static work")
+        local _, petTimer = c:Labels(1)
+        local _, totemTimer, count = c:Labels(2)
+        assert(petTimer == "0:11" and totemTimer == "0:19" and count == "x3", "native countdowns changed")
+        c.phase = "paused"
+        c:ResetCounts()
+        c:Tick()
+        c:NoPresentationWrites()
+        assert(not c.reads.layout and not c.reads.binds, "paused countdowns repeated static work")
+
+        -- A getter can change metadata or group count without a new receipt.
+        totem.name, totem.icon, totem.count = "Fresh native name", "Interface\\Icons\\FreshTotem", 4
+        c:Tick()
+        local name
+        name, _, count = c:Labels(2)
+        assert(name == totem.name and count == "x4", "same-sized native metadata stayed stale")
+        assert(c.env.SurvivorsDragonUiPetPortrait2:GetTexture() == totem.icon, "changed art did not bind")
+        table.insert(c.env.AZS_TOTEMS, Totem("magma_totem", 2))
+        c:Tick()
+        assert(#c:Rows() == 3 and c:Rows()[3]:IsShown(), "unannounced group growth missed layout")
+        table.remove(c.env.AZS_TOTEMS, 2)
+        c:Tick()
+        assert(not c:Rows()[3]:IsShown() and c.layoutFrame:GetHeight() == height, "group shrink retained a row")
+        c.layoutFrame:SetWidth(width + 20)
+        c.layoutFrame:SetHeight(height + 20)
+        c:Tick()
+        assert(c.layoutFrame:GetWidth() == width and c.layoutFrame:GetHeight() == height, "bounds stopped recovering")
+        c:ResetCounts()
+        c.layoutFrame:SetScale(1.25)
+        c:Tick()
+        assert(c.reads.binds == 2, "scale changes skipped icon recovery")
+    end
+end)
+
+Test("failed static pet artwork keeps its original retries and settles after recovery", function()
+    for _, performance in ipairs({ false, true }) do
+        local c = Pets()
+        c:SetSetting("performanceMode", performance)
+        local icon = "Interface\\Icons\\RetryTotem"
+        local totem = Totem("retry_totem", 2)
+        totem.icon = icon
+        c.failTexture = icon
+        c:Publish("AZSTOTEMS", { totem })
+        c:Tick()
+        local objects = #c.objects
+        c:ResetCounts()
+        c:Tick()
+        assert((c.writes.SetTexture or 0) > 0 and #c.objects == objects, "failed static art stopped retrying")
+        assert(not c.reads.totems and not c.reads.clock, "art retry repeated native timer reads")
+        c.failTexture = nil
+        c:Tick()
+        local visible = false
+        for _, object in ipairs(c.objects) do
+            if object.kind == "Texture" and object:GetTexture() == icon and object:IsVisible() then visible = true end
+        end
+        assert(visible and #c.objects == objects, "static artwork did not recover through the original pool")
+        c:ResetCounts()
+        c:Tick()
+        c:NoPresentationWrites()
+    end
 end)
 
 print("PASS pet/totem UI contracts: " .. passed)

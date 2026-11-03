@@ -257,8 +257,10 @@ def prepare_runtime_dimensions():
             outputs.append((path, atlas))
         elif name == "media/tex/jewelry/Frame.blp" and source.size == (1024, 256):
             atlas = Image.new("RGBA", (512, 128))
-            for index, left in enumerate((106, 576, 664)):
+            for index, left in enumerate((106, 576)):
                 atlas.paste(source.crop((left - 1, 55, left + 73, 129)), (index * 128, 0))
+            atlas.paste(source.crop((896, 0, 1024, 128)), (256, 0))
+            atlas.paste(source.crop((896, 128, 1024, 256)), (384, 0))
             outputs.append((path, atlas))
         else:
             if name == "media/tex/jewelry/SocketRail.blp":

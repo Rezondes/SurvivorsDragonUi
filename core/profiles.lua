@@ -112,13 +112,6 @@ DFRL:NewMod("Profiles", 1, function()
     }
     profiles.search =
         { captions.summary, captions.name, captions.saved, captions.save, actions[1], actions[2], actions[3] }
-    function profiles.MinimumWidth(measure)
-        local buttonWidth = 0
-        for _, entry in ipairs(actions) do
-            buttonWidth = math.max(buttonWidth, measure(entry.label) + 24)
-        end
-        return math.max(buttonWidth * 3 + 16, measure(captions.save.label) + 192, measure(captions.summary.label) + 24)
-    end
     function profiles.CreateControls(parent, width)
         local function Label(text, y, size, height)
             local label = parent:CreateFontString(nil, "OVERLAY")
@@ -144,7 +137,7 @@ DFRL:NewMod("Profiles", 1, function()
         input:SetMaxLetters(48)
         input:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -52)
         Label(captions.saved.label, -90, 10)
-        local status = Label(captions.summary.description, -340, 10, 44)
+        local status = Label(captions.summary.description, -340, 9, 44)
         local selected, offset = nil, 0
         local rows, buttons = {}, {}
         local pageSize = 5

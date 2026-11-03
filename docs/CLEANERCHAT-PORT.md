@@ -47,7 +47,7 @@ Native mouse input, hyperlinks, wheel scrolling and text input remain active.
 
 Movement ownership is set during attachment and compared against actual native
 state at the existing presentation refresh points: native chat-window events,
-selection, Show and the one-second refresh. An unexpected restored drag region
+selection, Show and the selected pane's one-second fallback. An unexpected restored drag region
 is stopped and collapsed before anchors are checked. The slide animation does
 not poll or rewrite it. All eight native resize controls stay hidden and native
 `SetResizable(true)` remains, avoiding the earlier FrameXML resize error. No
@@ -55,7 +55,9 @@ FrameXML global is replaced and no setting, SavedVariable, overlay or updater
 is added. Manual source review and pinned formatting do not establish live input
 behavior; local tests and addon/game execution were not run.
 
-The chat window defaults to 520 by 340 pixels, with a default bottom-left position, 20 pixels from the left edge and 40 pixels above the bottom edge to keep the input and scroll indicator onscreen. It uses the game's DEFAULT font at 12 pixels with an outline, fully transparent backgrounds (opacity 0) and a stripped native input skin. `/sdui` enters layout editing: left-drag its body to move it or a corner icon to change its actual dimensions, updating native message wrapping without scaling fonts. The centered Confirm button saves the pending geometry and locks it again. All native and custom chat tabs, the Combat Log tab and the Copy button stay hidden. The message pane, input and scroll indicator have no background textures, and the copy dialog has a transparent fill. New activity slides the message pane into position over 0.35 seconds. Native message lines remain visible for 14 seconds before a 0.6-second fade. Only the mouse wheel over the chat area reveals retained faded messages; hovering, layout editing/moving/resizing and input show/hide/focus do not reveal history or pause fading. New messages still display normally. Revealing old, faded history fades the pane in over 0.6 seconds, without restarting that intro on each wheel notch. Fading stays paused while wheel-scrolled back for reading and resumes when the wheel returns to the bottom. The passive scroll indicator shows centered `Scroll down for latest messages` or unread-status text while viewing history, without an image or clickable snap-to-bottom action. `/copy` opens the Copy dialog.
+The chat pane defaults to 220 UI units tall and up to 400 units wide. It starts 20 units from the left edge and 40 units above the bottom edge, leaving room for the input and scroll indicator. The default width leaves a 12-unit gap beside the SDUI action bar. If the left side cannot fit 240 units, the default pane sits above the bar.
+
+Chat uses the game's DEFAULT font at 12 pixels with an outline, fully transparent backgrounds (opacity 0) and a stripped native input skin. `/sdui` enters layout editing: left-drag its body to move it or a corner icon to change its actual dimensions, updating native message wrapping without scaling fonts. The centered Confirm button saves the pending geometry and locks it again. All native and custom chat tabs, the Combat Log tab and the Copy button stay hidden. The message pane, input and scroll indicator have no background textures, and the copy dialog has a transparent fill. New activity slides the message pane into position over 0.35 seconds. Native message lines remain visible for 14 seconds before a 0.6-second fade. Only the mouse wheel over the chat area reveals retained faded messages; hovering, layout editing/moving/resizing and input show/hide/focus do not reveal history or pause fading. New messages still display normally. Revealing old, faded history fades the pane in over 0.6 seconds, without restarting that intro on each wheel notch. Fading stays paused while wheel-scrolled back for reading and resumes when the wheel returns to the bottom. The passive scroll indicator shows centered `Scroll down for latest messages` or unread-status text while viewing history, without an image or clickable snap-to-bottom action. `/copy` opens the Copy dialog.
 
 The primary `ChatFrame1` receives regular chat and game notices while preserving native channel membership and routing. Combat-log groups for attacks, damage, healing, auras and deaths are removed from the visible regular chat, including subscriptions saved by the earlier all-groups setup. XP, honor, reputation, tradeskill and item-enchantment notices remain in regular chat. The separate native Combat Log frame keeps its subscriptions and unmodified text, with its tab hidden. When logging is enabled, the diagnostic archive captures combat events independently, without adding them to regular chat. Presentation animation does not authorize additional message-formatting changes.
 
@@ -66,9 +68,29 @@ total lifetime. Wheel-scrolled history still pauses expiry; returning to the
 bottom resumes it. Native history, links and input remain intact. The mode also
 settles slides and reveals immediately. Disabling it restores the 14-second
 hold and 0.6-second fade through the shared settings preview/discard listener.
+
+In both modes, the frame callback visits only panes with active slides, history
+reveals or pending level/stat delivery. Completed effects leave that reused work
+set. The selected pane keeps per-frame scroll/unread and actual native
+visibility/opacity repair, skipping the opacity wrapper when already correct.
+Selection, native events, Show and the existing selected-pane controller repair
+fade ownership. Hidden and mode transitions settle visual work without dropping
+pending messages, changing native history or replaying old effects. These are
+source-level call reductions with CI-only lifecycle coverage; no local tests or
+addon/game execution were run, and FPS/input appearance remain unverified.
+
 The existing fade owner caches the effective duration, defers hidden changes
 and retries failed configuration writes; no timer, frame, event, updater,
 message copy or saved state is added.
+
+The periodic chat layout check keeps its one-second safety interval for the
+selected pane, catching unannounced native position, size and font resets at the
+same speed. It no longer revisits every inactive pane or a hidden input box.
+Input Show/header changes and native chat-window events still repair immediately;
+root Show repairs visible input too. Native-pane discovery and container-size
+reads remain cheap periodic checks. Both modes share this path, with no new
+poller or setting. This reduces the work in each check without extending visible
+recovery time. CI-only cases retain messages, scrolling, input and hidden recovery.
 
 The inspected public native-base
 [fade setters and retirement branch](https://github.com/samwhosung/benilla/blob/cdebda36fb4c611ad0a8c35ddc45bf53e4ff1c60/crates/benilla-ui/src/widget/kinds/messageframe.rs#L622)
@@ -121,7 +143,7 @@ Banner counters, stage diagnostics and captured failures are also collected only
 
 After enabling logging, type `/copy` to open the latest diagnostic page, then press Ctrl+C to copy the selected text. The `<` and `>` buttons move between pages; the first page is the newest archive chunk, followed by older chunks and available native history. Each page contains at most six KiB of archived text, with the compact Banners status above it. Text remains in its original order within a page. A long record can cross a page boundary without splitting a UTF-8 character. The dialog no longer inserts or measures the complete session archive at once.
 
-While the dialog is open and `/sdui` editing is active, left-drag its body to move it or a corner icon to resize its actual dimensions. Confirm saves the pending geometry and locks the dialog with the other frames. Resizing updates only the current page's wrapping and scroll viewport without scaling fonts. The command is registered in `modules/chat/copy.lua` through `_G.SLASH_SURVIVORSDRAGONUICOPY1` and `_G.SlashCmdList["SURVIVORSDRAGONUICOPY"]`, using the real global table for the native chat parser. It calls `NewCaptureSnapshot()` and `ShowCopy` independently of visible chat setup. The archived-page boundary is fixed at invocation while normal capture continues. Each `/copy` invocation takes a new boundary and current Banners status. The existing full `GetCaptureText()` export API remains available, but the dialog does not call it. No Copy button or chat tabs are shown.
+While the dialog is open and `/sdui` editing is active, left-drag its body to move it or a corner icon to resize its actual dimensions. Confirm saves the pending geometry and locks the dialog with the other frames. Resizing updates only the current page's wrapping and scroll viewport without scaling fonts. The command is registered in `modules/chat/copy.lua` through `_G.SLASH_SURVIVORSDRAGONUICOPY1` and `_G.SlashCmdList["SURVIVORSDRAGONUICOPY"]`, using the real global table for the native chat parser. It calls `NewCaptureSnapshot()` and `ShowCopy` independently of visible chat setup. The archived-page boundary is fixed at invocation while normal capture continues. Each `/copy` invocation takes a new boundary and current Banners status. No Copy button or chat tabs are shown.
 
 `modules/chat/capture.lua` is loaded before chat setup and records independently of native chat subscriptions and formatting. While enabled, its own event frame captures supported `CHAT_MSG_*` events, including addon, combat and monster events, plus `UI_ERROR_MESSAGE`, `UI_INFO_MESSAGE` and `PLAYER_LEVEL_UP`. `[EVT]` entries retain the raw message, author and additional event arguments, adapting the supplied source's `/ccdebug` diagnostic coverage for Interface 11200. `[RAW]` entries record original Lua `AddMessage` input from every standard native chat frame before prettifying, hiding announcements or combining level/stat lines. Copies of one event delivered across native frames are collapsed; separate identical calls on the same frame remain recorded. Diagnostic markup pipes are escaped, as in the original debug output, so link/color codes are available to copy as text. Diagnostic entries are not printed into the visible chat.
 

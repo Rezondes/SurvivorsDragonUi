@@ -8,7 +8,7 @@ local function Revive()
     local create = context.Object
     function context:Object(...)
         local object = create(self, ...)
-        local width, point = object.GetWidth, object.SetPoint
+        local width, point, visible = object.GetWidth, object.SetPoint, object.IsVisible
         function object:GetWidth()
             if self.name == "SurvivorsDragonUiRevive" then
                 context.reads.rootWidth = (context.reads.rootWidth or 0) + 1
@@ -18,6 +18,12 @@ local function Revive()
         function object:SetPoint(anchor, relative, relativePoint, x, y)
             point(self, anchor, relative, relativePoint, x, y)
             self.anchor = { point = anchor, relative = relative, relativePoint = relativePoint, x = x, y = y }
+        end
+        function object:IsVisible()
+            if self.name == "SurvivorsDragonUiRevive" and not context.changingVisibility then
+                context.reads.rootVisibility = (context.reads.rootVisibility or 0) + 1
+            end
+            return visible(self)
         end
         function object:GetEffectiveScale() return context.scale or 1 end
         function object:GetStringWidth()
@@ -40,7 +46,12 @@ local function Revive()
         assert(part == "revive")
         return {
             Acquire = function() context.nativeOwned = true end,
-            Release = function() context.nativeOwned = false end,
+            Release = function()
+                context.reads.release = (context.reads.release or 0) + 1
+                if context.failRelease then return false end
+                context.nativeOwned = false
+                return true
+            end,
         }
     end
     env.T.GetLocalSize = function(frame) return frame:GetWidth(), frame:GetHeight() end
@@ -86,33 +97,50 @@ local function Revive()
         context.pulses = (context.pulses or 0) + 1
         return math.sin(...)
     end
-    env.AZS_GetPhase = function() return context.phase or "playing" end
-    env.AZS_GetRevive = function() return env.AZS_REVIVE end
+    env.AZS_GetPhase = function()
+        context.reads.phase = (context.reads.phase or 0) + 1
+        return context.phase or "playing"
+    end
+    env.AZS_GetRevive = function()
+        context.reads.revive = (context.reads.revive or 0) + 1
+        return env.AZS_REVIVE
+    end
     env.geterrorhandler = function()
         return function(message) context.lastError = message end
     end
     context:Load("modules/ui/revive.lua", "Revive")
     context.root = assert(env.SurvivorsDragonUiRevive)
     context.controller = context:Controller("CHAT_MSG_ADDON")
-    context.crosses = {}
-    for _, object in ipairs(context.objects) do
-        if object.kind == "StatusBar" then context.bar = object end
-        if object.kind == "FontString" then
-            if object:GetFont() and select(2, object:GetFont()) == 12 then
-                context.percent = object
-            elseif object:GetHeight() == 22 then
-                context.caption = object
-            end
-        elseif object.kind == "Texture" then
-            local texture = object:GetTexture()
-            if texture == "Interface\\Buttons\\WHITE8X8" then
-                table.insert(context.crosses, object)
-            elseif texture and string.find(texture, "Spark.blp", 1, true) then
-                context.spark = object
+    function context:FindEffects()
+        context.crosses, context.spark = {}, nil
+        for _, object in ipairs(context.objects) do
+            if object.kind == "StatusBar" then context.bar = object end
+            if object.kind == "ScrollFrame" then context.fillClip = object end
+            if object.kind == "FontString" then
+                if object:GetFont() and select(2, object:GetFont()) == 12 then
+                    context.percent = object
+                elseif object:GetHeight() == 22 then
+                    context.caption = object
+                end
+            elseif object.kind == "Texture" then
+                local texture = object:GetTexture()
+                if texture == "Interface\\Buttons\\WHITE8X8" then
+                    table.insert(context.crosses, object)
+                elseif texture and string.find(texture, "Spark.blp", 1, true) then
+                    context.spark = object
+                end
             end
         end
     end
-    assert(context.bar and context.caption and context.percent and context.spark and #context.crosses == 12)
+    context:FindEffects()
+    assert(
+        context.bar
+            and context.fillClip
+            and context.caption
+            and context.percent
+            and not context.spark
+            and #context.crosses == 0
+    )
     function context:ResetPerf()
         self:ResetCounts()
         self.formats, self.percentFormats = 0, 0
@@ -121,17 +149,40 @@ local function Revive()
     function context:Tick(elapsed)
         self.now = self.now + elapsed
         self:Call(self.controller, "OnUpdate", elapsed)
+        self:FindEffects()
     end
     function context:Publish(state)
         self.env.AZS_REVIVE, self.env.AZS_REVIVE_UPDATED = state, self.now
         self:Event(self.controller, "CHAT_MSG_ADDON", "AZSREVIVE")
         self:Tick(0)
     end
+    local setSetting = context.SetSetting
+    function context:SetSetting(key, value)
+        setSetting(self, key, value)
+        self:FindEffects()
+    end
     function context:Hidden(hidden)
         self.hidden = hidden
         self:SetLayoutHidden(hidden)
     end
     return context
+end
+
+do
+    local context = Revive()
+    context:SetSetting("performanceMode", true)
+    local allocated = #context.objects
+    context:Publish({ down = 1, by = "Alice", share = 0.5 })
+    context:Tick(0.2)
+    assert(not context.spark and #context.crosses == 0 and #context.objects == allocated)
+    assert(context.bar.value == 0.5 and context.percent:GetText() == "50%")
+    assert(context.fillClip:GetWidth() == (context.root:GetWidth() - 72) / 2 and not context.bar.fill)
+    context:SetSetting("performanceMode", false)
+    assert(context.spark and #context.crosses == 12 and #context.objects == allocated + 13)
+    allocated = #context.objects
+    context:SetSetting("performanceMode", true)
+    context:SetSetting("performanceMode", false)
+    assert(#context.objects == allocated, "revive decoration did not reuse its first-use pool")
 end
 
 do
@@ -219,12 +270,22 @@ do
     context:Publish({ down = 1, by = "Alice", share = 0.2504 })
     context:ResetPerf()
     context:Tick(0.01)
-    assert(context.reads.rootWidth == 1, "dirty paint and crosses repeated the same root width read")
+    assert(not context.reads.rootWidth, "settled revive animation reread the root width")
+    assert(context.reads.rootVisibility == 1, "between-sample animation reread root visibility")
     assert(
         context.percentFormats == 0 and context.percent:GetText() == "25%",
         "small smoothing steps reformatted percent"
     )
     assert(context.env.T.NearlyEqual(context.bar.value, 0.25 + 0.0004 * 0.01 / 0.14), "smoothing equation changed")
+    local crossX = context.crosses[3].anchor.x
+    context.root:SetWidth(376)
+    context:Call(context.root, "OnSizeChanged")
+    context:ResetPerf()
+    context:Tick(0.01)
+    assert(
+        context.reads.rootWidth == 1 and context.crosses[3].anchor.x == crossX + 5,
+        "native resize did not refresh cross geometry on the next frame"
+    )
     context.layoutWidth = 508
     context:Publish({ down = 1, by = "Beatrice", share = 0.5 })
     assert(context.spark.anchor.x == 226 and context.percent:GetText() == "50%", "fresh paint retained the prior width")
@@ -235,7 +296,24 @@ do
         "catch-up skipped its one-point step"
     )
 end
-print("PASS Revive shares width only within animation and preserves cross clipping, smoothing and percentage steps")
+print("PASS Revive reuses settled width and preserves resize, cross clipping, smoothing and percentage steps")
+
+do
+    local context = Revive()
+    context:Publish({ down = 1, by = "Alice", share = 0.5 })
+    context:Tick(0)
+    local phase = context.env.AZS_GetPhase
+    context.env.AZS_GetPhase = function()
+        context.root:Hide()
+        return phase()
+    end
+    context:ResetPerf()
+    context:Tick(0.1)
+    assert(
+        context.reads.phase == 1 and context.reads.rootVisibility == 1 and context.pulses == 0,
+        "animation reused visibility across a native refresh that hid the revive frame"
+    )
+end
 
 do
     local context = Revive()
@@ -317,3 +395,66 @@ do
     )
 end
 print("PASS Revive clears caption metadata after a failed initial write before the view becomes active")
+
+for _, performance in ipairs({ false, true }) do
+    local context = Revive()
+    context:SetSetting("performanceMode", performance)
+    for _, idle in ipairs({ {}, { down = 0, reviving = "", rshare = 0 } }) do
+        context:Publish(idle)
+        context:ResetPerf()
+        for _ = 1, 10 do
+            context:Tick(0.1)
+        end
+        context:NoPresentationWrites()
+        assert(
+            context.reads.phase == 10 and context.reads.release == 10 and not context.reads.revive,
+            "idle cache stopped phase/release checks or reread state"
+        )
+        assert(not context.root:IsShown() and not context.nativeOwned)
+    end
+    local packet = context.env.AZS_REVIVE
+    packet.down, packet.reviving, packet.rshare = 0, "Bob", 0.25
+    context:ResetPerf()
+    context:Event(context.controller, "CHAT_MSG_ADDON", "AZSREVIVE")
+    context:Tick(0)
+    assert(
+        context.reads.revive == 1 and context.caption:GetText() == "Reviving Bob!",
+        "same-stamp receipt missed activation"
+    )
+    context.failRelease = true
+    context:Publish({ down = 0, reviving = "" })
+    context:ResetPerf()
+    context:Tick(0.1)
+    assert(
+        context.nativeOwned and context.reads.release == 1 and not context.reads.revive,
+        "idle release stopped retrying"
+    )
+    context.failRelease = false
+    context:Tick(0.1)
+    assert(not context.nativeOwned and not context.reads.revive, "idle HUD release did not recover")
+    context:Publish({ down = 0 }) -- Missing fields are not an explicit idle state.
+    context:ResetPerf()
+    for _ = 1, 3 do
+        context:Tick(0.1)
+    end
+    assert(context.reads.revive == 3, "malformed idle data stopped retrying")
+    local getter = context.env.AZS_GetRevive
+    context.env.AZS_GetRevive = function()
+        context.reads.revive = (context.reads.revive or 0) + 1
+        error("native revive unavailable")
+    end
+    context:Tick(0.1)
+    context.env.AZS_GetRevive = getter
+    context.env.AZS_REVIVE.down, context.env.AZS_REVIVE.reviving, context.env.AZS_REVIVE.rshare = 0, "Carol", 0.5
+    context:Tick(0.1)
+    assert(context.caption:GetText() == "Reviving Carol!", "failed-read retry adopted an idle cache")
+    context:Publish({})
+    context.phase = "ready"
+    context:Tick(0.1)
+    context.phase = "playing"
+    context:Tick(0.1)
+    assert(not context.root:IsShown(), "phase retirement replayed the cached publication")
+    context:Publish({ down = 1, by = "Alice", share = 0.2 })
+    assert(context.root:IsShown() and context.caption:GetText() == "Alice is reviving you!")
+end
+print("PASS idle Revive reuse keeps phase checks, fresh receipts, malformed/error retries and retirement in both modes")
