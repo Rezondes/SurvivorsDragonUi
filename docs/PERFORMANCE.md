@@ -4,6 +4,61 @@ The performance work removes repeated presentation writes while retaining native
 data, pause-aware timing, saved preferences and artwork. It adds no gameplay clock
 or native client dependency. Display choices use the existing saved display table.
 
+## Stepped rotation, plate sampling and deferred refreshes (2026-11-04)
+
+The run timer trace showed that changing texture crops can make the renderer
+prepare new materials. Three paths still rotated textures through continuously
+changing eight-coordinate crops: the cache, guardian and fallen-ally guide
+arrows, the legacy minimap player arrow and the gold-field rays. They now share
+`T.RotateTexture`, which snaps each rotation to one of 128 steps per turn (about
+2.8 degrees) and writes UVs only when the step changes. Each texture can therefore
+use at most 128 distinct crops. Guide bearing, interpolation, `pointerAngle`,
+the minimap arrow offset and the gold phase keep their exact values. The gold
+glow clears its step on start so a restart repaints the rays. Whether the
+packaged renderer reuses these materials still needs a live material trace.
+
+Nameplate scans reuse one root-geometry record per pass instead of allocating a
+table each frame. Plate show and health callbacks reuse a second record that
+they invalidate on every call, so they still sample WorldFrame afresh. The Lua
+5.0 client collects garbage in full pauses, so steady per-frame tables add to
+those pauses. Each live plate origin now keeps its native effective scale and
+half extents for the current WorldFrame scale. Per-frame sampling reads only
+`GetCenter` and `GetTop`; a new incarnation or a changed WorldFrame scale
+rereads the three fixed values, and invalid values stay uncached and retry.
+This assumes native plates keep their size during one incarnation; the addon
+never resizes or rescales them.
+
+The regular one-second meter pass now reads the native snapshot in one frame
+and draws rows, bars, header and tooltips on the following frame, so the
+snapshot read and the row painting no longer share a frame. The deferred draw
+reuses the data of the preceding read without another snapshot call, so totals,
+rates, tooltips and checkpoints are unchanged. Input, settings, scrolling,
+Reset, Layout changes and showing the meter still prime the reader and draw in
+the same frame. Hiding, disabling, choice cards, world exit, Release and
+controller detachment drop a pending draw; deferred draw failures use the
+existing fault path.
+
+Target, target-of-target, pet and party frames run at most one full refresh per
+frame. Unit health, faction and classification events, native `OnValueChanged`
+callbacks and target-health owner notifications only mark work and arm a
+one-shot `OnUpdate` on each module's existing event frame, which clears itself
+after the flush. One target health change previously ran the full resize,
+label and classification pass up to three times. Enemy red is still repaired
+synchronously in the bar callback, and selection, world entry, party changes
+and Show stay immediate. Hidden frames schedule nothing, and world leave or
+logout cancel pending work.
+
+The user then requested a **Refresh rate** option for the meter (`meterRefreshRate`,
+0.25–2 seconds, default 0.5). The regular reader now runs at that cadence, so
+the default doubles complete native snapshot reads from one to two per second.
+DPS/HPS presentation and the positive-window recent capture keep their
+one-second sampling. Choosing 1 s restores the former read count.
+
+No frame, region, asset, event or updater is added; the only new setting is the
+requested refresh rate in the existing display table. Both Performance Mode
+states share these paths. CI-only fixtures count writes and reads; they do not
+measure allocation, material creation or FPS.
+
 ## Run timer progress hitches — 2026-11-03
 
 In one live session the player reported that the recurring hitch disappeared

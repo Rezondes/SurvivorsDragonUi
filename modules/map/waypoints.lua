@@ -1014,20 +1014,6 @@ DFRL:NewMod("Waypoints", 3, function()
         tracker.selectedKey = tracker.selected and tracker.selected.key or nil
     end
 
-    local function Rotate(texture, angle)
-        local c, s = math.cos(angle) / 2, math.sin(angle) / 2
-        texture:SetTexCoord(
-            0.5 - c - s,
-            0.5 + s - c,
-            0.5 - c + s,
-            0.5 + s + c,
-            0.5 + c - s,
-            0.5 - s - c,
-            0.5 + c + s,
-            0.5 - s + c
-        )
-    end
-
     local function WrapAngle(angle)
         local turn = math.pi * 2
         return angle - math.floor((angle + math.pi) / turn) * turn
@@ -1148,7 +1134,7 @@ DFRL:NewMod("Waypoints", 3, function()
             -- Native heading is counterclockwise, destination bearing clockwise.
             local angle = bearing + facing
             if tracker.pointerAngle ~= angle then
-                Rotate(tracker.pointer, angle)
+                T.RotateTexture(tracker.pointer, angle)
                 tracker.pointerAngle = angle
             end
             if not tracker.pointer:IsShown() then tracker.pointer:Show() end

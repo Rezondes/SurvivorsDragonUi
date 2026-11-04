@@ -2004,6 +2004,13 @@ DFRL:NewMod("RunTimers", 5, function()
                         step = 5,
                         format = function(value) return value == 0 and DFRL.locale.Text("All") or tostring(value) end,
                     },
+                    {
+                        "meterRefreshRate",
+                        "Refresh rate",
+                        "Update meter numbers every 0.25 to 2 seconds.",
+                        step = 0.25,
+                        format = function(value) return tostring(value) .. " s" end,
+                    },
                     { "meterNameFontSize", "Name font size", "Change spell and player name size.", step = 1 },
                     { "meterFontSize", "Number font size", "Change meter numbers and header size.", step = 1 },
                     { "meterShowDamage", "Ability damage", "Show each ability's damage or healing total." },
@@ -2529,7 +2536,8 @@ DFRL:NewMod("RunTimers", 5, function()
         if type(GetAddOnMetadata) == "function" then
             local ok, version = pcall(GetAddOnMetadata, "SurvivorsDragonUi", "Version")
             if ok and type(version) == "string" then
-                local _, _, patch = string.find(version, "^%d+%.%d+%.(%d+)%-survivors$")
+                -- An optional local build suffix shows as v88.1, v88.2 and so on.
+                local _, _, patch = string.find(version, "^%d+%.%d+%.(%d+[%.%d]*)%-survivors$")
                 if patch then titleText = titleText .. " v" .. patch end
             end
         end
@@ -3575,7 +3583,6 @@ DFRL:NewMod("RunTimers", 5, function()
         end
         local function PaintGlow()
             local c, s = math.cos(entry.glowPhase), math.sin(entry.glowPhase)
-            local halfC, halfS = c / 2, s / 2
             for index, glow in ipairs(entry.glow) do
                 local direction = entry.glowDirections[index]
                 local facing = math.max(0, c * direction.x - s * direction.y)
@@ -3586,16 +3593,7 @@ DFRL:NewMod("RunTimers", 5, function()
                 end
             end
             for _, light in ipairs(entry.glowLights) do
-                light.rays:SetTexCoord(
-                    0.5 - halfC - halfS,
-                    0.5 + halfS - halfC,
-                    0.5 - halfC + halfS,
-                    0.5 + halfS + halfC,
-                    0.5 + halfC - halfS,
-                    0.5 - halfS - halfC,
-                    0.5 + halfC + halfS,
-                    0.5 - halfS + halfC
-                )
+                T.RotateTexture(light.rays, entry.glowPhase)
                 for _, sparkle in ipairs(light.sparkles) do
                     local twinkle = math.max(0, math.sin(entry.glowPhase * 3 + sparkle.offset * 0.7 + 0.8))
                     local alpha = 0.55 * twinkle * twinkle * twinkle * twinkle
@@ -3656,6 +3654,9 @@ DFRL:NewMod("RunTimers", 5, function()
             end
             entry.glowRunning = true
             entry.glowAge, entry.glowPhase = 0, 0
+            for _, light in ipairs(entry.glowLights) do
+                T.ClearRotation(light.rays)
+            end
             PaintGlow()
             for _, light in ipairs(entry.glowLights) do
                 light.rays:Show()

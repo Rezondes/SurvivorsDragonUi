@@ -124,6 +124,14 @@ same cadence. Input, settings, scrolling, Reset and showing the meter prime the
 existing reader for the next frame, keeping user feedback immediate without
 another idle updater.
 
+A regular one-second pass reads the snapshot in one frame and draws its rows,
+bars, header and tooltips on the following frame, so reading and drawing do not
+share one frame. The deferred draw uses exactly the data of that read and never
+collects another snapshot. Primed reads and the first read after the meter
+appears still read and draw in the same frame. Hiding, disabling, choice cards,
+world exit, Release and controller detachment drop a pending draw, and a draw
+failure uses the existing fault path.
+
 Damage Done requests the selected native recent window on the regular
 one-second pass. Extra triggered reads within that second may use complete
 native snapshots with `windowSeconds = 0` while the viewport's native rates
@@ -236,6 +244,13 @@ party getter skip that view.
 Under **DPS window**, use the minus/plus buttons for **5–120 seconds**, in
 five-second steps. Below five, **All** selects the whole-run average. Hover over
 the header or a source to see its whole-run average alongside recent DPS.
+
+**Refresh rate** sets how often totals, bars, shares and order update: every
+**0.25–2 seconds** in quarter-second steps, **0.5 seconds** by default. DPS and
+HPS values keep their one-second sampling and the native recent-window capture
+stays at one second; extra reads in between use zero-window snapshots. The
+choice is saved as `meterRefreshRate` in the display table with the usual
+preview, Confirm, Cancel, profiles and full resets.
 The **reset button** starts a new session for all four views. It clears totals, source rows, shares,
 rankings, scroll position and displayed/recent rates together. Existing effects
 or pets remain in game; their later damage or healing counts as new activity.
