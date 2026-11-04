@@ -1422,16 +1422,19 @@ do
     current:Call(plate, "OnShow")
     assert(plate.fixture.origin ~= origin and reads.scale == 2, "a reused plate kept its retired metrics")
 
-    local width = plate.GetWidth
-    plate.GetWidth = function() return -1 end
-    plate:Hide()
-    current:Call(plate, "OnHide")
-    plate:Show()
-    current:Call(plate, "OnShow")
-    local invalid = plate.fixture.origin
-    assert(invalid and invalid.metricsScale == nil, "invalid native metrics were cached")
-    plate.GetWidth = width
-    current:Tick(1 / 60)
-    assert(invalid.metricsScale == 2 and invalid.x, "invalid native metrics did not recover on the next sample")
+    for _, case in ipairs({ { "GetWidth", -1 }, { "GetWidth", 0 }, { "GetHeight" }, { "GetEffectiveScale" } }) do
+        local method, value = unpack(case)
+        local original = plate[method]
+        plate[method] = function() return value end
+        plate:Hide()
+        current:Call(plate, "OnHide")
+        plate:Show()
+        current:Call(plate, "OnShow")
+        local incomplete = plate.fixture.origin
+        assert(incomplete and incomplete.metricsScale == nil, method .. " cached incomplete native metrics")
+        plate[method] = original
+        current:Tick(1 / 60)
+        assert(incomplete.metricsScale == 2 and incomplete.x, method .. " did not recover on the next sample")
+    end
 end
 print("PASS plates cache fixed native metrics per incarnation and callbacks sample fresh shared geometry")

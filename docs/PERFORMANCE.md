@@ -24,17 +24,17 @@ they invalidate on every call, so they still sample WorldFrame afresh. The Lua
 those pauses. Each live plate origin now keeps its native effective scale and
 half extents for the current WorldFrame scale. Per-frame sampling reads only
 `GetCenter` and `GetTop`; a new incarnation or a changed WorldFrame scale
-rereads the three fixed values, and invalid values stay uncached and retry.
+rereads the three fixed values. Missing scale and missing, zero or invalid
+dimensions stay uncached and retry.
 This assumes native plates keep their size during one incarnation; the addon
 never resizes or rescales them.
 
-The regular one-second meter pass now reads the native snapshot in one frame
-and draws rows, bars, header and tooltips on the following frame, so the
-snapshot read and the row painting no longer share a frame. The deferred draw
-reuses the data of the preceding read without another snapshot call, so totals,
-rates, tooltips and checkpoints are unchanged. Input, settings, scrolling,
-Reset, Layout changes and showing the meter still prime the reader and draw in
-the same frame. Hiding, disabling, choice cards, world exit, Release and
+The regular meter pass reads the native snapshot in one frame and draws rows,
+bars, header and tooltips on the following frame. A slow frame that is already
+due for another read finishes the pending draw first and carries the elapsed
+time into the next frame. Input, settings, scrolling, Reset, Layout changes
+and showing the meter still prime the reader and draw in the same frame.
+Hiding, disabling, choice cards, world exit, Release and
 controller detachment drop a pending draw; deferred draw failures use the
 existing fault path.
 
@@ -48,11 +48,12 @@ synchronously in the bar callback, and selection, world entry, party changes
 and Show stay immediate. Hidden frames schedule nothing, and world leave or
 logout cancel pending work.
 
-The user then requested a **Refresh rate** option for the meter (`meterRefreshRate`,
-0.25–2 seconds, default 0.5). The regular reader now runs at that cadence, so
-the default doubles complete native snapshot reads from one to two per second.
-DPS/HPS presentation and the positive-window recent capture keep their
-one-second sampling. Choosing 1 s restores the former read count.
+The meter's **Refresh rate** option (`meterRefreshRate`) sets the regular read
+interval to 0.25–2 seconds. The one-second default keeps the previous read
+count. Faster settings increase complete native snapshot reads even when those
+reads use a zero-second window. Regular DPS/HPS sampling and recent-window
+captures wait for the next eligible read at least one second after the last
+rate sample.
 
 No frame, region, asset, event or updater is added; the only new setting is the
 requested refresh rate in the existing display table. Both Performance Mode

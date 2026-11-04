@@ -631,16 +631,20 @@ DFRL:NewMod("NameplateCombatText", 6, function()
         -- them only for a new origin or a changed WorldFrame scale.
         local ratio, halfWidth, halfHeight = origin.metricsRatio, origin.metricsHalfWidth, origin.metricsHalfHeight
         if origin.metricsScale ~= geometry.scale then
-            local plateScale = plate:GetEffectiveScale() or geometry.scale
-            if not IsFiniteNumber(plateScale) or plateScale <= 0 then return end
-            ratio = plateScale / geometry.scale
+            local plateScale = plate:GetEffectiveScale()
+            local scale = plateScale or geometry.scale
+            if not IsFiniteNumber(scale) or scale <= 0 then return end
+            ratio = scale / geometry.scale
             halfWidth = (plate:GetWidth() or 0) * ratio * 0.5
             halfHeight = (plate:GetHeight() or 0) * ratio * 0.5
             if not IsFiniteNumber(halfWidth) or not IsFiniteNumber(halfHeight) or halfWidth < 0 or halfHeight < 0 then
                 return
             end
-            origin.metricsScale, origin.metricsRatio = geometry.scale, ratio
-            origin.metricsHalfWidth, origin.metricsHalfHeight = halfWidth, halfHeight
+            -- Unavailable dimensions and scale can recover on the same plate.
+            if plateScale and halfWidth > 0 and halfHeight > 0 then
+                origin.metricsScale, origin.metricsRatio = geometry.scale, ratio
+                origin.metricsHalfWidth, origin.metricsHalfHeight = halfWidth, halfHeight
+            end
         end
         x, y = x * ratio - geometry.left, y * ratio - geometry.bottom
         local width, height = geometry.width, geometry.height

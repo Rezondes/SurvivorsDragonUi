@@ -1473,19 +1473,21 @@ and requires a restart to repaint the rays.
 The nameplate fixture requires a settled plate to sample its position every
 frame without rereading effective scale, width or height. A health callback
 reads WorldFrame geometry afresh, a WorldFrame scale change rereads the plate
-metrics once, a reused plate starts a new origin with fresh metrics, and invalid
-metrics stay uncached until the next valid sample. These mocks count reads and
-writes only. They do not measure Lua allocation, renderer materials or FPS, and
-no local tests or game execution were run.
+metrics once and a reused plate starts a new origin with fresh metrics. Missing
+scale and missing, zero or invalid dimensions stay uncached until the next
+valid sample on the same plate. These mocks count reads and writes only.
+They do not measure Lua allocation, renderer materials or FPS, and no local
+tests or game execution were run.
 
 The native meter view fixture's regular tick now runs the read frame and a
 zero-elapsed draw frame. New cases require a regular read to make exactly one
 snapshot call and to paint only on the next frame, in both Performance Mode
 states. Primed reads (mouse wheel, settings) paint in the same frame; hiding
 or disabling between read and draw paints nothing and detaches cleanly; a
-deferred draw failure reaches the existing fault path. A refresh-rate case
-requires half-second and two-second settings to read exactly at their cadence
-and still draw on the following frame.
+deferred draw failure reaches the existing fault path. The fixture checks
+half-second and two-second settings and verifies that a frame longer than the
+quarter-second refresh interval draws the pending result before another
+regular read, preserving elapsed time for that read.
 
 `ui_health_spec.lua` loads the production target color, border and
 refresh-scheduling code against the real health owner. A burst of target

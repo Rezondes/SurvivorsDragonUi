@@ -1638,7 +1638,8 @@ local function BuildMeter()
     Tick = function()
         if not inWorld then return end
         age = age + (tonumber(arg1) or 0)
-        if not primed and age < (options.refreshSeconds or REFRESH_SECONDS) then
+        -- Finish a regular draw even when a slow frame makes the next read due.
+        if not primed and (presentation.drawPending or age < (options.refreshSeconds or REFRESH_SECONDS)) then
             if presentation.drawPending then
                 local ok, message = pcall(DrawPending)
                 if not ok then

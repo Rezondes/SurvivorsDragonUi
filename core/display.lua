@@ -15,7 +15,7 @@ DFRL:NewMod("Display", 0, function()
         meterFontSize = 11,
         meterNameFontSize = 11,
         meterDpsWindow = 10,
-        meterRefreshRate = 0.5,
+        meterRefreshRate = 1,
         meterColorMode = "default",
         meterAbilityColor = "CCA147",
         meterProcColor = "4094FF",

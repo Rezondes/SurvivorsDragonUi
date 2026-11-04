@@ -1807,6 +1807,19 @@ Test("regular refresh draws on the following frame", function()
     end
 end)
 
+Test("a slow frame paints the pending read before another regular read", function()
+    local c, state = View(function(context) context.settings.meterRefreshRate = 0.25 end)
+    local second = c:Row(2)
+    ChangeSecondAmount(state, 80, "slow-frame-read")
+    local reads = state.calls.snapshot
+    c:Frame(0.3)
+    assert(state.calls.snapshot == reads + 1 and second.bar.value == 0.4)
+    c:Frame(0.3)
+    assert(state.calls.snapshot == reads + 1 and second.bar.value == 0.8, "slow frame lost the pending draw")
+    c:Frame(0.016)
+    assert(state.calls.snapshot == reads + 2, "drawing discarded the elapsed time for the next read")
+end)
+
 Test("primed refresh draws in the same frame", function()
     local c, state = View()
     local second = c:Row(2)
